@@ -77,7 +77,7 @@ test('production sign-in supports memory-only key import, both NIP-46 directions
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
     // Bridge only this explicit test host to our local relay, preserving encrypted traffic.
-    await page.routeWebSocket('wss://signer.test/**', (route) => {
+    await page.routeWebSocket(/wss:\/\/(?:relay\.napplet\.soy|signer\.test)\//, (route) => {
       const wire = new WebSocket(relayUrl),
         queued: (string | Buffer)[] = [];
       route.onMessage((message) => {
@@ -91,6 +91,7 @@ test('production sign-in supports memory-only key import, both NIP-46 directions
     });
     await page.goto(origin);
     await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    await page.getByRole('button', { name: 'Extension', exact: true }).click();
     await page.getByRole('button', { name: 'Connect browser extension', exact: true }).click();
     await page.getByText(/Install or unlock a Nostr extension/).waitFor();
     await page.getByRole('button', { name: 'Private key', exact: true }).click();
@@ -107,6 +108,7 @@ test('production sign-in supports memory-only key import, both NIP-46 directions
       .getByRole('button', { name: `${(await imported.getPublicKey()).slice(0, 6)}…`, exact: true })
       .click();
     await page.getByText('Connected through a key in browser memory').waitFor();
+    await page.getByRole('button', { name: 'Private key', exact: true }).click();
     expect(await page.getByLabel('Private key', { exact: true }).inputValue()).toBe('');
     const storage = await page.evaluate(() =>
       JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }),
@@ -115,16 +117,19 @@ test('production sign-in supports memory-only key import, both NIP-46 directions
     await page.reload();
     await page.getByRole('button', { name: 'Connect', exact: true }).click();
     await page.getByRole('button', { name: 'Remote signer', exact: true }).click();
-    await page.getByLabel('Signer relay', { exact: true }).fill('wss://signer.test/');
-    await page.getByRole('button', { name: 'Create connection code' }).click();
     const first = await page.getByLabel('Connection link', { exact: true }).inputValue();
+    expect(new URL(first).searchParams.getAll('relay')).toEqual(['wss://relay.napplet.soy']);
     await page
       .getByRole('img', { name: 'Scan this Nostr Connect pairing code in your signer' })
       .waitFor();
-    await page.getByRole('button', { name: 'Cancel connection', exact: true }).click();
-    await page.getByRole('button', { name: 'Create connection code' }).click();
+    expect(await page.getByLabel('Bunker URI', { exact: true }).isVisible()).toBe(true);
+    expect(await page.getByText(/Saved credentials are encrypted/).count()).toBe(0);
+    await page.getByRole('button', { name: 'Change signer relay' }).click();
+    await page.getByLabel('Signer relay', { exact: true }).fill('wss://signer.test/');
+    await page.getByRole('button', { name: 'Use signer relay' }).click();
     const second = await page.getByLabel('Connection link', { exact: true }).inputValue();
     expect(new URL(first).hostname).not.toBe(new URL(second).hostname);
+    expect(new URL(second).searchParams.getAll('relay')).toEqual(['wss://signer.test/']);
     await provider.handleNostrConnectURI(second);
     await page.getByRole('dialog').waitFor({ state: 'hidden' });
     const creatorLabel = `${(await creator.getPublicKey()).slice(0, 6)}…`;
@@ -141,11 +146,12 @@ test('production sign-in supports memory-only key import, both NIP-46 directions
     bunker.searchParams.delete('relay');
     bunker.searchParams.append('relay', 'wss://signer.test/');
     await page.getByRole('button', { name: 'Remote signer', exact: true }).click();
-    await page.getByLabel('Bunker link', { exact: true }).fill(bunker.href);
+    await page.getByLabel('Bunker URI', { exact: true }).fill(bunker.href);
     await page.getByRole('button', { name: 'Connect bunker', exact: true }).click();
     await page.getByRole('dialog').waitFor({ state: 'hidden' });
     await page.getByRole('button', { name: creatorLabel, exact: true }).click();
-    expect(await page.getByLabel('Bunker link', { exact: true }).inputValue()).toBe('');
+    await page.getByRole('button', { name: 'Remote signer', exact: true }).click();
+    expect(await page.getByLabel('Bunker URI', { exact: true }).inputValue()).toBe('');
     const output = join(root, '.local/identity-check');
     await mkdir(output, { recursive: true });
     await page.screenshot({ path: join(output, 'connected-desktop.png') });

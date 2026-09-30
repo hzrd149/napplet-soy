@@ -59,7 +59,7 @@ test('one creator guide retains CLI information and identity opens at its header
       '--template',
       'xcode-select --install',
       'Secret Service',
-      'D-Bus/keyring',
+      'D-Bus session',
       'Alpine/musl',
       'libasound2t64',
       'compatibility alias',
@@ -105,11 +105,12 @@ test('one creator guide retains CLI information and identity opens at its header
     await browserExpect(menu).toBeHidden();
     await trigger.click();
     await page.getByRole('button', { name: 'Remote signer', exact: true }).click();
-    await page.getByLabel('Bunker link').fill('bunker://test-only-draft');
+    await page.getByLabel('Bunker URI').fill('bunker://test-only-draft');
     await page.locator('h1').click();
     await browserExpect(menu).toBeHidden();
     await trigger.click();
-    await browserExpect(page.getByLabel('Bunker link')).toHaveValue('');
+    await page.getByRole('button', { name: 'Remote signer', exact: true }).click();
+    await browserExpect(page.getByLabel('Bunker URI')).toHaveValue('');
     await page.keyboard.press('Escape');
 
     for (const width of [320, 390]) {

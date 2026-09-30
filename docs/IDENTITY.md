@@ -164,8 +164,13 @@ of commands; the presentation is an anchored popup. Session and key handling are
 
 
 The shell and social prompts open the same account chooser. Choose a NIP-07
-extension, create a NIP-46 connection code/link, paste a `bunker://` link, or import
-an nsec/hex private key after acknowledging the warning. The selected account signs
+extension, a NIP-46 remote signer, or a private-key flow. After a method is selected,
+the chooser hides its general guidance and shows only the controls needed for that
+method. Selecting a remote signer immediately creates a connection QR and link using
+`wss://relay.napplet.soy`; an optional secondary control changes the signer relay and
+regenerates the one-time connection. A signer-provided `bunker://` URI can be pasted
+below the QR as an alternative. Importing an nsec/hex private key still requires an
+explicit risk acknowledgment. The selected account signs
 comments, likes, identified zaps, profile editing, named links and admin authentication.
 The website also signs explicitly composed kind-1 share notes (2026-09-24 source).
 Existing remote signers may request approval for `sign_event:1`; refusal preserves
