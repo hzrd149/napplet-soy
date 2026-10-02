@@ -1,9 +1,18 @@
 # soyLI releases and updates
 
 GitHub Releases distribute the standalone CLI independently of the website/VPS.
-The current published version is **0.23.4**.
+The current published version is **0.23.6**.
 
-**0.23.6 release candidate — 2026-10-03:**
+**0.23.6 published 2026-10-03 (Europe/Vienna):**
+[GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.23.6),
+source `f71162f9e869c98d3bb2791245c27aa95f928e50`.
+[Workflow 37072285190](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37072285190)
+passed the source gate and all four native build, installer/updater, sandbox and
+fresh-project checks. All 11 release assets are public. Installer and manifest
+checksums, source revision and native matrix were verified. An isolated public
+macOS ARM64 installation reports 0.23.6/current and passes the real CLI data-pack
+import/sync regression (23 assertions). The user's installation and accounts were
+unchanged; no website or Blossom deployment was needed or performed.
 
 Managed assets now accept binary data packs (including custom extensions such as
 `.ssrcpack`), JSON and plain text. The earlier media-only importer rejected these
