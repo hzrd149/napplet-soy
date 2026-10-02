@@ -3,7 +3,7 @@
 GitHub Releases distribute the standalone CLI independently of the website/VPS.
 The current published version is **0.23.4**.
 
-**0.23.5 release candidate — 2026-10-03:**
+**0.23.6 release candidate — 2026-10-03:**
 
 Managed assets now accept binary data packs (including custom extensions such as
 `.ssrcpack`), JSON and plain text. The earlier media-only importer rejected these
@@ -32,6 +32,12 @@ remix. TypeScript and all 436 source tests pass, along with legacy publication
 resume and Git/archive remix regressions. A native macOS ARM64 package builds embedded/external data in the upstream
 Vite template and reads the exact bytes after a fresh checkout. Native CI requires
 the CLI, sandbox and Vite regressions on all four release platforms.
+
+The unpublished 0.23.5 candidate passed source checks and the Linux ARM64 job,
+but combining the new asset-browser suite with backend initialization in one Bun
+process reproduced a macOS SIGKILL; Linux x64's later signing test also timed out.
+Browser/bundler suites now run in separate processes, retaining every assertion
+and the shared browser cache. No published artifacts or previous tags were replaced.
 
 **0.23.4 published 2026-09-26:**
 [GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.23.4),

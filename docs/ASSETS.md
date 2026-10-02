@@ -3,7 +3,7 @@
 The managed workflow was introduced in **soyLI 0.13.0** and is available in the
 published **0.14.1** release (2026-09-20), including the integrated local workshop.
 Runtime resources and presentation covers/clips remain separate.
-Binary/JSON/text import and the Blob helper are added in soyLI **0.23.5**.
+Binary/JSON/text import and the Blob helper are added in soyLI **0.23.6**.
 
 ## Managed assets: CLI and local workshop
 
