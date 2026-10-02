@@ -293,6 +293,12 @@ not claimed as a standardized NAP or prerequisite for external proposals.
 
 ## Managed resource authoring review — 2026-09-20
 
+2026-10-03 authoring correction: soyLI's inventory now admits the same verified
+binary, JSON and text already supported by the shared resource host. Generated
+`assetBlob()` uses the existing `resource.bytes` Blob result or locally decodes
+embedded data. The selected RESOURCE/shim pins, MIME policy, CSP, byte limits and
+manifest envelopes are unchanged. No new NAP or server upload policy is introduced.
+
 Reviewed [NAP-RESOURCE proposal 13 at `8c0645d`](https://github.com/napplet/naps/blob/8c0645d32ceb159bc3e8bcec1107a92862b7e86a/naps/NAP-RESOURCE.md),
 including complete Blob results, canonical `blossom:sha256:<hex>` references, hash
 verification and host MIME/policy ownership. The existing shim 0.30.0, starter SDK

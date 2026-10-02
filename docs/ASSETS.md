@@ -3,11 +3,12 @@
 The managed workflow was introduced in **soyLI 0.13.0** and is available in the
 published **0.14.1** release (2026-09-20), including the integrated local workshop.
 Runtime resources and presentation covers/clips remain separate.
+Binary/JSON/text import and the Blob helper are added in soyLI **0.23.5**.
 
 ## Managed assets: CLI and local workshop
 
-Run `soyli dev` and choose **Manage project** to import an image, sound, font or
-short video. Supply its name and license/credit, choose **embedded** or **Blossom**,
+Run `soyli dev` and choose **Manage project** to import media, fonts, JSON, text or
+binary data packs. Supply its name and license/credit, choose **embedded** or **Blossom**,
 and inspect its preview, hash, size and destination. The same operations are available
 to an agent:
 
@@ -36,6 +37,37 @@ as a required capability. The inventory/helper are authoring conventions; playba
 on another host does not require parsing our lockfile or contacting napplet.soy.
 Use `releaseAssetUrls()` when a long-lived app no longer needs cached Blob URLs.
 
+### Data packs, maps and other non-media assets
+
+The managed importer also accepts hash-verified binary data, JSON and plain text.
+There is no filename-extension allowlist: a custom pack such as `.ssrcpack` is
+stored byte-for-byte under its content hash, with `.bin`, `.json` or `.txt` chosen
+from the bytes. A separate `nak` upload or media disguise is unnecessary.
+
+```sh
+soyli assets add ./game.ssrcpack game-pack --storage external --license MIT
+```
+
+Use the generated Blob helper to read data inside the sandbox:
+
+```ts
+import { assetBlob } from '../soy-assets.js';
+const pack = new Uint8Array(await (await assetBlob('game-pack')).arrayBuffer());
+// Pass pack to your application's decoder.
+const levels = JSON.parse(await (await assetBlob('levels')).text());
+```
+
+Use the actual license/attribution for your assets. `assets add` imports locally;
+`soyli publish` or `soyli propose` uploads external assets using the selected creator
+and configured Blossom, then verifies the downloaded bytes. `assets sync` regenerates
+helpers; it does not upload. In existing projects run `soyli update`, then
+`soyli skills update` and `soyli assets sync`, rebuild, test and publish.
+
+Both storage modes support `assetBlob`. Do not use `fetch(await assetUrl(...))`:
+the sandbox blocks direct fetch, including Blob URLs. The helper obtains external
+Blobs through NAP-RESOURCE and decodes embedded data URLs locally. This adds no
+network permission or server proxy, and requires no new public host capability.
+
 The upstream Vite single-file build handles embedded imports. Rebuild after inventory
 changes. Local preview serves only registered, hash-verified originals through the
 same resource host. Publish freezes, uploads and verifies external files at the
@@ -45,8 +77,16 @@ resources too. Git/source archives retain originals; fresh remixes validate them
 without relying on the creator's asset cache. Removing an inventory entry preserves
 original files and previously published blobs; update source calls explicitly.
 
-Current admission: PNG, JPEG, WebP, GIF, WAV, Ogg, MP3, WOFF/WOFF2, MP4 and WebM.
-Signatures identify types; codec support still depends on the browser. Exercise actual
+Current admission: PNG, JPEG, WebP, GIF, WAV, Ogg, MP3, WOFF/WOFF2, MP4, WebM,
+JSON, plain text and opaque binary data. Signatures identify types; names and
+upstream Content-Type headers do not override this. The existing runtime policy
+still refuses raw HTML, SVG/XML and active-document markers, including those
+within the first 4 KiB of an otherwise opaque pack. Credential checks remain in
+place. Packs are not unpacked or converted; use a bundled decoder and exercise
+the real data, including any dependencies or expanded size. Import acceptance
+does not certify a particular pack format or Flash runtime.
+
+Codec support still depends on the browser. Exercise actual
 image decoding, sound playback, font loading and video playback in the host. Asset
 registration does not convert formats, stream indefinitely or certify every scene.
 

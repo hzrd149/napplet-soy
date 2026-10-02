@@ -8,7 +8,7 @@ import { importAsset, readAssets } from '../../packages/assets/src';
 import { startPreviewServer } from '../../apps/cli/src/preview/server';
 import { previewAssets } from '../../apps/cli/src/preview/assets';
 
-test('manager saves files and the real sandbox decodes managed image, audio, font and video through local and remote resource hosts', async () => {
+test('manager saves files and the real sandbox decodes media and data packs through local and remote resource hosts', async () => {
   const root = await mkdtemp(join(tmpdir(), 'soy-manager-browser-'));
   let server: ReturnType<typeof startPreviewServer> | undefined;
   let remote: ReturnType<typeof Bun.serve> | undefined;
@@ -49,18 +49,24 @@ test('manager saves files and the real sandbox decodes managed image, audio, fon
       ['sound', wav],
       ['typeface', await Bun.file(fontPath).bytes()],
       ['movie', await Bun.file('tests/fixtures/preview.webm').bytes()],
+      ['pack', new Uint8Array([83, 83, 82, 67, 0, 1, 255, 128, 10, 42])],
+      ['levels', new TextEncoder().encode('{"level":7}')],
+      ['dialogue', new TextEncoder().encode('Hello — 你好')],
     ] as const;
     for (const [id, bytes] of files)
       await importAsset(root, { id, bytes, storage: 'external', license: 'fixture' });
     await Bun.write(
       join(root, 'probe.js'),
-      `import {assetUrl} from './soy-assets.js';
+      `import {assetUrl, assetBlob} from './soy-assets.js';
       window.probe = async () => {
         const image = new Image(); image.src = await assetUrl('picture'); await image.decode();
         const font = new FontFace('ManagedFont', 'url(' + await assetUrl('typeface') + ')'); await font.load(); document.fonts.add(font);
         const audio = new Audio(await assetUrl('sound')); await new Promise((ok,fail)=>{audio.onloadeddata=ok;audio.onerror=fail;audio.load();});
         const video = document.createElement('video'); video.muted=true; video.src=await assetUrl('movie'); await new Promise((ok,fail)=>{video.onloadeddata=ok;video.onerror=fail;video.load();});
-        document.querySelector('output').textContent=JSON.stringify({image:image.naturalWidth,font:font.status,audio:audio.duration,video:video.videoWidth});
+        const pack = Array.from(new Uint8Array(await (await assetBlob('pack')).arrayBuffer()));
+        const levels = JSON.parse(await (await assetBlob('levels')).text());
+        const dialogue = await (await assetBlob('dialogue')).text();
+        document.querySelector('output').textContent=JSON.stringify({image:image.naturalWidth,font:font.status,audio:audio.duration,video:video.videoWidth,pack,levels,dialogue});
       };`,
     );
     const built = await Bun.build({
@@ -111,6 +117,9 @@ test('manager saves files and the real sandbox decodes managed image, audio, fon
     );
     expect(decoded).toMatchObject({ image: 1, font: 'loaded', audio: 1 });
     expect(decoded.video).toBeGreaterThan(0);
+    expect(decoded.pack).toEqual(Array.from(files[4][1]));
+    expect(decoded.levels).toEqual({ level: 7 });
+    expect(decoded.dialogue).toBe('Hello — 你好');
     await page.getByRole('button', { name: 'Manage project' }).click();
     await page.getByLabel('Display title', { exact: true }).fill('My little asset laboratory');
     await page.getByRole('button', { name: 'Save project', exact: true }).click();
@@ -118,9 +127,11 @@ test('manager saves files and the real sandbox decodes managed image, audio, fon
     expect((await Bun.file(join(root, 'napplet.json')).json()).title).toBe(
       'My little asset laboratory',
     );
-    await page
-      .getByLabel('Choose a file', { exact: true })
-      .setInputFiles({ name: 'extra.png', mimeType: 'image/png', buffer: Buffer.from(png) });
+    await page.getByLabel('Choose a file', { exact: true }).setInputFiles({
+      name: 'extra.ssrcpack',
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from(files[4][1]),
+    });
     await page.getByLabel('Asset name · e.g. jump-sound', { exact: true }).fill('extra');
     await page.getByRole('button', { name: 'Add asset', exact: true }).click();
     const extra = page
@@ -129,6 +140,9 @@ test('manager saves files and the real sandbox decodes managed image, audio, fon
     await extra.getByRole('button', { name: 'Embed instead' }).click();
     await extra.getByRole('button', { name: 'Use Blossom' }).waitFor();
     expect((await readAssets(root)).assets.find((a) => a.id === 'extra')?.storage).toBe('embedded');
+    expect((await readAssets(root)).assets.find((a) => a.id === 'extra')?.mime).toBe(
+      'application/octet-stream',
+    );
     await Bun.write(join(root, 'preview-cover.png'), png);
     await page.getByRole('button', { name: 'Reload from files' }).click();
     await page.getByRole('button', { name: 'Use as cover' }).click();
@@ -186,7 +200,13 @@ test('manager saves files and the real sandbox decodes managed image, audio, fon
     await browserExpect
       .poll(async () => page.frameLocator('iframe').locator('output').textContent())
       .toContain('"font":"loaded"');
-    expect(new Set(hits).size).toBe(4);
+    const remoteDecoded = JSON.parse(
+      (await page.frameLocator('iframe').locator('output').textContent())!,
+    );
+    expect(remoteDecoded.pack).toEqual(decoded.pack);
+    expect(remoteDecoded.levels).toEqual(decoded.levels);
+    expect(remoteDecoded.dialogue).toBe(decoded.dialogue);
+    expect(new Set(hits).size).toBe(7);
   } finally {
     await browser?.close();
     server?.stop(true);

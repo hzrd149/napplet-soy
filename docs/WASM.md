@@ -199,7 +199,9 @@ listing or metadata files. Compound formats with relative dependencies (such as
 multi-file glTF) need an explicit mapping/asset loader or a self-contained variant;
 do not fall back to raw HTTP. Current managed formats and budgets are in the
 [asset guide](https://github.com/zeSchlausKwab/napplet-soy/blob/main/docs/ASSETS.md).
-No compressed meshes or arbitrary binary MIME support is implied by WASM support.
+Managed assets also accept verified binary packs, JSON and text under the existing
+resource policy. This does not add a Bevy loader or decoder for those formats;
+compressed meshes and relative dependencies still need application-side support.
 
 ## Sources and verification boundary
 

@@ -3,6 +3,36 @@
 GitHub Releases distribute the standalone CLI independently of the website/VPS.
 The current published version is **0.23.4**.
 
+**0.23.5 release candidate — 2026-10-03:**
+
+Managed assets now accept binary data packs (including custom extensions such as
+`.ssrcpack`), JSON and plain text. The earlier media-only importer rejected these
+before contacting Blossom; the server and hash-addressed resource host already
+support them. Generated `assetBlob()` reads both embedded and external data inside
+the sandbox without direct fetch. Media keeps the existing `assetUrl()` helper.
+
+The CLI, local workshop and bundled authoring guidance use the same workflow.
+Exact earlier media helpers remain valid when resuming or remixing old publications;
+frozen source and Git history are not rewritten. Regenerate helpers explicitly to
+use the new Blob API.
+Imports remain byte-for-byte, hash-verified and source-scanned, with the existing
+10 MiB/file and 32 MiB managed limits. Active-document policy is unchanged; importing
+a pack does not certify its decoder or contents. No Blossom or website deployment
+is required for these authoring changes. See [data assets](ASSETS.md#data-packs-maps-and-other-non-media-assets).
+
+After installing this release, run `soyli skills update` and `soyli assets sync`
+inside existing projects, then rebuild, test and publish. Import with
+`soyli assets add ./game.ssrcpack game-pack --storage external --license <license>`.
+`assets add` and `assets sync` are local operations; publication/proposals perform
+the uploads using the configured creator and destination.
+
+Local verification includes the real CLI entrypoint, sandbox reads of media and
+binary/JSON/text, publisher interruption and corruption repair, and a fresh Git
+remix. TypeScript and all 436 source tests pass, along with legacy publication
+resume and Git/archive remix regressions. A native macOS ARM64 package builds embedded/external data in the upstream
+Vite template and reads the exact bytes after a fresh checkout. Native CI requires
+the CLI, sandbox and Vite regressions on all four release platforms.
+
 **0.23.4 published 2026-09-26:**
 [GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.23.4),
 source `923e89e3074463484bde98e8b496b5433799dffd`.

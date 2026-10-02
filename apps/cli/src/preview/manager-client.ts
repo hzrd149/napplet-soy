@@ -96,7 +96,7 @@ export function setupManager(signal: AbortSignal) {
     project.append(form);
     const assets = section(
       'The asset cupboard.',
-      'Images, sound, fonts and short videos. Originals stay in Git; external runtime copies go to your chosen Blossom server.',
+      'Media, fonts, JSON, text and binary data packs. Originals stay in Git; external runtime copies go to your chosen Blossom server when you publish.',
     );
     assets.append(
       el(
@@ -228,7 +228,7 @@ export function setupManager(signal: AbortSignal) {
       grid,
       el(
         'p',
-        "In your source: import { assetUrl } from '../soy-assets.js'; then await assetUrl('jump-sound'). Rebuild after inventory changes.",
+        "Import assetUrl from '../soy-assets.js' for media, or assetBlob for data: await (await assetBlob('game-pack')).arrayBuffer(). Rebuild after inventory changes.",
         'manager-recipe',
       ),
     );

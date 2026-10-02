@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inspectProject } from '../../packages/publish/src/project';
 import { checkPublication } from '../../apps/cli/src/publish-check';
+import { chromium, expect as browserExpect } from '@playwright/test';
 
 const enabled = process.env.SPACE_TEST_CLI ? test : test.skip;
 enabled(
@@ -49,11 +50,29 @@ enabled(
           ['assets', 'add', png, storage, '--storage', storage, '--license', 'CC0'],
           original,
         );
+      const packBytes = new Uint8Array([83, 83, 82, 67, 0, 1, 255, 128, 10, 42]);
+      const dataAssets = [
+        ['pack', packBytes],
+        ['levels', new TextEncoder().encode('{"level":7}')],
+        ['dialogue', new TextEncoder().encode('Hello — 你好')],
+      ] as const;
+      for (const [id, bytes] of dataAssets) {
+        const path = join(root, id + '.ssrcpack');
+        await Bun.write(path, bytes);
+        for (const storage of ['embedded', 'external'])
+          await run(['assets', 'add', path, `${id}-${storage}`, '--storage', storage], original);
+      }
       await Bun.write(
         join(original, 'src/main.ts'),
-        `import { assetUrl } from '../soy-assets.js';
+        `import { assetUrl, assetBlob } from '../soy-assets.js';
 const output = document.createElement('output'); document.body.replaceChildren(output);
-Promise.all(['embedded','external'].map(async id => { const image = new Image(); image.src = await assetUrl(id); await image.decode(); return image.naturalWidth; })).then(sizes => { output.textContent = JSON.stringify(sizes); }).catch(error => { throw error; });`,
+Promise.all(['embedded','external'].map(async id => {
+  const image = new Image(); image.src = await assetUrl(id); await image.decode();
+  const pack = Array.from(new Uint8Array(await (await assetBlob('pack-' + id)).arrayBuffer()));
+  const levels = JSON.parse(await (await assetBlob('levels-' + id)).text());
+  const dialogue = await (await assetBlob('dialogue-' + id)).text();
+  return {image: image.naturalWidth, pack, levels, dialogue};
+})).then(results => { output.textContent = JSON.stringify(results); }).catch(error => { throw error; });`,
       );
       await run(['build'], original);
       expect(await run(['check', '--json'], original)).toContain('"status":"checked"');
@@ -92,6 +111,7 @@ Promise.all(['embedded','external'].map(async id => { const image = new Image();
       });
       const devTimer = setTimeout(() => dev.kill('SIGKILL'), 60000);
       const errors = new Response(dev.stderr).text();
+      let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
       try {
         const reader = dev.stdout.getReader();
         let output = '';
@@ -102,6 +122,23 @@ Promise.all(['embedded','external'].map(async id => { const image = new Image();
         }
         reader.releaseLock();
         const { url } = JSON.parse(output.split('\n')[0]);
+        browser = await chromium.launch();
+        const page = await browser.newPage();
+        await page.goto(url);
+        await browserExpect
+          .poll(async () => page.frameLocator('iframe').locator('output').textContent())
+          .toContain('Hello');
+        const decoded = JSON.parse(
+          (await page.frameLocator('iframe').locator('output').textContent())!,
+        );
+        expect(decoded).toEqual(
+          ['embedded', 'external'].map(() => ({
+            image: 1,
+            pack: Array.from(packBytes),
+            levels: { level: 7 },
+            dialogue: 'Hello — 你好',
+          })),
+        );
         const html = await (await fetch(url)).text();
         const token = html.match(/name="soyli-token" content="([^"]+)"/)![1];
         const headers = {
@@ -134,6 +171,7 @@ Promise.all(['embedded','external'].map(async id => { const image = new Image();
         expect(after.artifactHash).not.toBe(before.artifactHash);
         expect(dev.exitCode).toBeNull();
       } finally {
+        await browser?.close();
         clearTimeout(devTimer);
         dev.kill();
         await dev.exited;

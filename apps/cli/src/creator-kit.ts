@@ -159,8 +159,18 @@ Keep lock/helper/originals in Git so another creator can rebuild. Publish/propos
 uploads external resources before announcing the playable version; remix verifies
 originals. Local preview uses the same sandbox with registered local bytes.
 
-Use PNG/JPEG/WebP/GIF, WAV/Ogg/MP3, WOFF/WOFF2 or short MP4/WebM. Decode/play the
-actual files during preview: format recognition is not codec/playback proof.
+Use PNG/JPEG/WebP/GIF, WAV/Ogg/MP3, WOFF/WOFF2, short MP4/WebM, JSON, plain text
+or opaque binary data packs (including custom extensions such as .ssrcpack).
+For data, import { assetBlob } from '../soy-assets.js'; then read
+await (await assetBlob('game-pack')).arrayBuffer() or .text() with your decoder.
+Do not fetch(await assetUrl(...)): even Blob URL fetches are blocked by the sandbox.
+The Blob helper works in both storage modes. No separate upload script or nak is
+needed: assets add imports locally; publish/propose uploads and verifies bytes;
+assets sync regenerates helpers without uploading. After upgrading soyLI, run
+assets sync in an existing project, rebuild and test. Format/extension recognition
+is not decoding proof: exercise real data/media. Packs are not unpacked or converted.
+Raw HTML, SVG/XML and active-document markers remain blocked by resource policy;
+credential scans still apply. Only include assets you have permission to publish.
 Current budget: 32 assets, 10 MiB each, 32 MiB managed total, within 40 MiB/128 source
 files. Embedded bytes also consume the 10 MiB HTML budget. These are tooling limits,
 not hosting plans. Destination Blossom is configurable; provider quotas are unknown.
