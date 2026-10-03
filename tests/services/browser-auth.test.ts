@@ -46,8 +46,13 @@ test('production sign-in supports memory-only key import, both NIP-46 directions
   const relayUrl = `ws://127.0.0.1:${relay.port}`;
   const pool = new RelayPool();
   const creator = new PrivateKeySigner();
-  const provider = new NostrConnectProvider({ upstream: creator, relays: [relayUrl], pool });
+  let provider = new NostrConnectProvider({ upstream: creator, relays: [relayUrl], pool });
   await provider.start();
+  async function resetProvider() {
+    await provider.stop();
+    provider = new NostrConnectProvider({ upstream: creator, relays: [relayUrl], pool });
+    await provider.start();
+  }
   const probe = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response() });
   const port = probe.port;
   probe.stop(true);
@@ -77,7 +82,7 @@ test('production sign-in supports memory-only key import, both NIP-46 directions
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
     // Bridge only this explicit test host to our local relay, preserving encrypted traffic.
-    await page.routeWebSocket('wss://signer.test/**', (route) => {
+    await page.routeWebSocket(/wss:\/\/(?:relay\.napplet\.soy|signer\.test)\//, (route) => {
       const wire = new WebSocket(relayUrl),
         queued: (string | Buffer)[] = [];
       route.onMessage((message) => {
@@ -91,6 +96,7 @@ test('production sign-in supports memory-only key import, both NIP-46 directions
     });
     await page.goto(origin);
     await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    await page.getByRole('button', { name: 'Extension', exact: true }).click();
     await page.getByRole('button', { name: 'Connect browser extension', exact: true }).click();
     await page.getByText(/Install or unlock a Nostr extension/).waitFor();
     await page.getByRole('button', { name: 'Private key', exact: true }).click();
@@ -107,6 +113,7 @@ test('production sign-in supports memory-only key import, both NIP-46 directions
       .getByRole('button', { name: `${(await imported.getPublicKey()).slice(0, 6)}…`, exact: true })
       .click();
     await page.getByText('Connected through a key in browser memory').waitFor();
+    await page.getByRole('button', { name: 'Private key', exact: true }).click();
     expect(await page.getByLabel('Private key', { exact: true }).inputValue()).toBe('');
     const storage = await page.evaluate(() =>
       JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage } }),
@@ -115,37 +122,145 @@ test('production sign-in supports memory-only key import, both NIP-46 directions
     await page.reload();
     await page.getByRole('button', { name: 'Connect', exact: true }).click();
     await page.getByRole('button', { name: 'Remote signer', exact: true }).click();
-    await page.getByLabel('Signer relay', { exact: true }).fill('wss://signer.test/');
-    await page.getByRole('button', { name: 'Create connection code' }).click();
+    const remember = page.getByLabel(/^Remember this connection/);
     const first = await page.getByLabel('Connection link', { exact: true }).inputValue();
+    expect(await remember.isChecked()).toBe(true);
+    expect(await remember.isEnabled()).toBe(true);
+    expect(new URL(first).searchParams.getAll('relay')).toEqual(['wss://relay.napplet.soy']);
     await page
       .getByRole('img', { name: 'Scan this Nostr Connect pairing code in your signer' })
       .waitFor();
-    await page.getByRole('button', { name: 'Cancel connection', exact: true }).click();
-    await page.getByRole('button', { name: 'Create connection code' }).click();
-    const second = await page.getByLabel('Connection link', { exact: true }).inputValue();
-    expect(new URL(first).hostname).not.toBe(new URL(second).hostname);
-    await provider.handleNostrConnectURI(second);
+    expect(await page.getByLabel('Bunker URI', { exact: true }).isVisible()).toBe(true);
+    expect(await page.getByText(/Saved credentials are encrypted/).count()).toBe(0);
+    // The preference is chosen while the automatically generated pairing is waiting.
+    await remember.uncheck();
+    expect((await page.getByLabel('Connection link', { exact: true }).inputValue()) === first).toBe(
+      true,
+    );
+    await provider.handleNostrConnectURI(first);
     await page.getByRole('dialog').waitFor({ state: 'hidden' });
     const creatorLabel = `${(await creator.getPublicKey()).slice(0, 6)}…`;
     await page.getByRole('button', { name: creatorLabel, exact: true }).click();
     await page.getByText('Connected through a remote signer').waitFor();
+    await page.getByText('Remote signer · This visit only · Selected', { exact: true }).waitFor();
+    await page.reload();
+    await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    expect(await page.getByRole('heading', { name: 'Accounts on this device' }).count()).toBe(0);
+
+    await resetProvider();
+    // Start the next attempt without remembering, then opt in after pairing starts.
+    await page.getByRole('button', { name: 'Extension', exact: true }).click();
+    await remember.uncheck();
+    await page.getByRole('button', { name: 'Remote signer', exact: true }).click();
+    await page.getByLabel('Connection link', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Change signer relay' }).click();
+    await page.getByLabel('Signer relay', { exact: true }).fill('wss://signer.test/');
+    await page.getByRole('button', { name: 'Use signer relay' }).click();
+    const second = await page.getByLabel('Connection link', { exact: true }).inputValue();
+    expect(new URL(first).hostname).not.toBe(new URL(second).hostname);
+    expect(new URL(second).searchParams.getAll('relay')).toEqual(['wss://signer.test/']);
+    await page.getByRole('button', { name: 'Extension', exact: true }).click();
+    await page.getByRole('button', { name: 'Remote signer', exact: true }).click();
+    const third = await page.getByLabel('Connection link', { exact: true }).inputValue();
+    expect(new URL(third).hostname).not.toBe(new URL(second).hostname);
+    expect(new URL(third).searchParams.getAll('relay')).toEqual(['wss://signer.test/']);
+    await page.getByRole('button', { name: 'Change signer relay' }).click();
+    expect(await page.getByLabel('Signer relay', { exact: true }).inputValue()).toBe(
+      new URL(third).searchParams.get('relay')!,
+    );
+    expect(await remember.isChecked()).toBe(false);
+    expect(await remember.isEnabled()).toBe(true);
+    await remember.check();
+    expect((await page.getByLabel('Connection link', { exact: true }).inputValue()) === third).toBe(
+      true,
+    );
+    await provider.handleNostrConnectURI(third);
+    await page.getByRole('dialog').waitFor({ state: 'hidden' });
+    await page.getByRole('button', { name: creatorLabel, exact: true }).click();
+    await page.getByText('Remote signer · Remembered · Selected', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    // Selecting a saved account retains its stored preference while reconnecting.
+    let reconnectRequested = false;
+    let approveReconnect!: () => void;
+    const reconnectApproval = new Promise<boolean>((resolve) => {
+      approveReconnect = () => resolve(true);
+    });
+    provider.onConnect = () => {
+      reconnectRequested = true;
+      return reconnectApproval;
+    };
+    try {
+      await page.getByRole('button', { name: /^Use account / }).click();
+      for (let i = 0; i < 100 && !reconnectRequested; i++) await Bun.sleep(20);
+      expect(reconnectRequested).toBe(true);
+      expect(await remember.isDisabled()).toBe(true);
+      approveReconnect();
+      await page.getByRole('dialog').waitFor({ state: 'hidden' });
+    } finally {
+      approveReconnect();
+      provider.onConnect = undefined;
+    }
+    await page.getByRole('button', { name: creatorLabel, exact: true }).click();
+    await page.getByText('Remote signer · Remembered · Selected', { exact: true }).waitFor();
     await page.reload();
     await page.getByRole('button', { name: creatorLabel, exact: true }).click();
     await page.getByText('Connected through a remote signer').waitFor();
-    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
-    await provider.stop();
-    provider.client = undefined;
-    await provider.start();
-    const bunker = new URL(await provider.getBunkerURI());
-    bunker.searchParams.delete('relay');
-    bunker.searchParams.append('relay', 'wss://signer.test/');
+    await page.getByText('Remote signer · Remembered · Selected', { exact: true }).waitFor();
+    await page.getByRole('button', { name: /^Forget account / }).click();
+    await page.getByRole('button', { name: 'Connect', exact: true }).waitFor();
+
+    // Hold actual signer approval so both bunker preference changes happen in flight.
+    for (const shouldRemember of [false, true]) {
+      await resetProvider();
+      const bunker = new URL(await provider.getBunkerURI());
+      bunker.searchParams.delete('relay');
+      bunker.searchParams.append('relay', 'wss://signer.test/');
+      let approvalRequested = false;
+      let approve!: () => void;
+      const approval = new Promise<boolean>((resolve) => {
+        approve = () => resolve(true);
+      });
+      provider.onConnect = () => {
+        approvalRequested = true;
+        return approval;
+      };
+      try {
+        await page.getByRole('button', { name: 'Extension', exact: true }).click();
+        await remember.setChecked(!shouldRemember);
+        await page.getByRole('button', { name: 'Remote signer', exact: true }).click();
+        await page.getByLabel('Bunker URI', { exact: true }).fill(bunker.href);
+        await page.getByRole('button', { name: 'Connect bunker', exact: true }).click();
+        for (let i = 0; i < 100 && !approvalRequested; i++) await Bun.sleep(20);
+        expect(approvalRequested).toBe(true);
+        expect(await remember.isEnabled()).toBe(true);
+        await remember.setChecked(shouldRemember);
+        approve();
+        await page.getByRole('dialog').waitFor({ state: 'hidden' });
+      } finally {
+        approve();
+        provider.onConnect = undefined;
+      }
+      await page.getByRole('button', { name: creatorLabel, exact: true }).click();
+      await page
+        .getByText(
+          `Remote signer · ${shouldRemember ? 'Remembered' : 'This visit only'} · Selected`,
+          { exact: true },
+        )
+        .waitFor();
+      await page.reload();
+      if (shouldRemember) {
+        await page.getByRole('button', { name: creatorLabel, exact: true }).click();
+        await page.getByText('Connected through a remote signer').waitFor();
+        await page.getByText('Remote signer · Remembered · Selected', { exact: true }).waitFor();
+      } else {
+        await page.getByRole('button', { name: 'Connect', exact: true }).click();
+        expect(await page.getByRole('heading', { name: 'Accounts on this device' }).count()).toBe(
+          0,
+        );
+      }
+    }
     await page.getByRole('button', { name: 'Remote signer', exact: true }).click();
-    await page.getByLabel('Bunker link', { exact: true }).fill(bunker.href);
-    await page.getByRole('button', { name: 'Connect bunker', exact: true }).click();
-    await page.getByRole('dialog').waitFor({ state: 'hidden' });
-    await page.getByRole('button', { name: creatorLabel, exact: true }).click();
-    expect(await page.getByLabel('Bunker link', { exact: true }).inputValue()).toBe('');
+    expect(await page.getByLabel('Bunker URI', { exact: true }).inputValue()).toBe('');
     const output = join(root, '.local/identity-check');
     await mkdir(output, { recursive: true });
     await page.screenshot({ path: join(output, 'connected-desktop.png') });

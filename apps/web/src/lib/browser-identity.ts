@@ -42,6 +42,7 @@ type Active = {
   backupKey?: Uint8Array;
 };
 type Feedback = Pick<SignerOptions, 'onAuth'>;
+type RememberChoice = boolean | (() => boolean);
 
 /** One tab-local signer backed by Applesauce account selection and an encrypted device vault. */
 export class BrowserIdentity {
@@ -256,7 +257,7 @@ export class BrowserIdentity {
     factory: (
       signal: AbortSignal,
     ) => Promise<{ signer: CreatorSigner; credential?: RemoteCredential; backupKey?: Uint8Array }>,
-    remember = true,
+    remember: RememberChoice = true,
     existing?: SessionAccount,
   ) {
     this.cancel();
@@ -279,6 +280,8 @@ export class BrowserIdentity {
       const changedSelection = !existing || this.accounts.active?.id !== existing.id;
       if (!this.accounts.getAccount(account.id) && this.saved.length >= 8)
         throw new Error('Forget a saved account before adding another (maximum eight).');
+      // Remote approval can take minutes; use the choice at activation, not QR creation.
+      const shouldRemember = typeof remember === 'function' ? remember() : remember;
       this.closeActive();
       account.signer = opened.signer;
       account.material =
@@ -288,7 +291,7 @@ export class BrowserIdentity {
             ? { method: 'remote', credential: opened.credential! }
             : { method: 'key', key: bytesToHex(opened.backupKey!) };
       account.metadata = {
-        remember,
+        remember: shouldRemember,
         expires: existing?.metadata?.expires ?? Date.now() + 30 * 86400000,
       };
       if (!this.accounts.getAccount(account.id)) this.accounts.addAccount(account);
@@ -399,7 +402,7 @@ export class BrowserIdentity {
       throw new Error('The account changed. Open backup again for the selected account.');
     return value;
   }
-  bunker(uri: string, feedback: Feedback = {}, remember = true) {
+  bunker(uri: string, feedback: Feedback = {}, remember: RememberChoice = true) {
     return this.connect(
       'remote',
       async (signal) => {
@@ -420,7 +423,7 @@ export class BrowserIdentity {
     relays: string[],
     onPairing: (uri: string) => void,
     feedback: Feedback = {},
-    remember = true,
+    remember: RememberChoice = true,
   ) {
     return this.connect(
       'remote',

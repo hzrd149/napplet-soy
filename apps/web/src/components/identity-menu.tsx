@@ -37,8 +37,10 @@ export function IdentityMenu({
 }) {
   const titleId = useId(),
     descriptionId = useId();
-  const [method, setMethod] = useState<'extension' | 'remote' | 'key' | 'create'>('extension');
+  type Method = 'extension' | 'remote' | 'key' | 'create';
+  const [method, setMethod] = useState<Method | null>(null);
   const [busy, setBusy] = useState(false);
+  const [editableRemember, setEditableRemember] = useState(false);
   const [error, setError] = useState('');
   const [uri, setUri] = useState('');
   const [auth, setAuth] = useState('');
@@ -46,14 +48,17 @@ export function IdentityMenu({
   const [password, setPassword] = useState('');
   const [showBackup, setShowBackup] = useState(false);
   const [relay, setRelay] = useState(defaultSignerRelays[0]);
+  const [showRelay, setShowRelay] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [remember, setRemember] = useState(true);
+  const rememberChoice = useRef(remember);
   const [rememberKey, setRememberKey] = useState(false);
   const attempt = useRef(0);
   function cancel() {
     attempt.current++;
     browserIdentity().cancel();
     setBusy(false);
+    setEditableRemember(false);
     setUri('');
     setAuth('');
     setSecret('');
@@ -71,9 +76,11 @@ export function IdentityMenu({
       onAuth: (url: string) => Promise<void>,
       onPairing: (uri: string) => void,
     ) => Promise<void>,
+    options: { editableRemember?: boolean } = {},
   ) {
     const current = ++attempt.current;
     setBusy(true);
+    setEditableRemember(!!options.editableRemember);
     setError('');
     setUri('');
     setAuth('');
@@ -93,10 +100,29 @@ export function IdentityMenu({
     } finally {
       if (current === attempt.current) {
         setBusy(false);
+        setEditableRemember(false);
         setUri('');
         setAuth('');
       }
     }
+  }
+  function startRemotePairing(nextRelay = relay) {
+    void run(
+      (onAuth, onPairing) =>
+        browserIdentity().pair(
+          [nextRelay.trim()],
+          onPairing,
+          { onAuth },
+          () => rememberChoice.current,
+        ),
+      { editableRemember: true },
+    );
+  }
+  function selectMethod(value: Method) {
+    cancel();
+    setMethod(value);
+    setShowRelay(false);
+    if (value === 'remote') startRemotePairing();
   }
   return (
     <Popover open={open} onOpenChange={changeOpen}>
@@ -104,7 +130,7 @@ export function IdentityMenu({
       <PopoverContent
         className="identity-menu"
         aria-labelledby={titleId}
-        aria-describedby={descriptionId}
+        aria-describedby={method ? undefined : descriptionId}
       >
         <div className="identity-menu-heading">
           <h2 id={titleId}>
@@ -116,10 +142,12 @@ export function IdentityMenu({
             </Button>
           </PopoverClose>
         </div>
-        <p id={descriptionId} className="muted identity-menu-description">
-          One identity for comments, likes, zaps and your creations. Remembered accounts survive
-          reloads on this device for 30 days. Browsing and creating need no website account.
-        </p>
+        {!method && (
+          <p id={descriptionId} className="muted identity-menu-description">
+            One identity for comments, likes, zaps and your creations. Remembered accounts survive
+            reloads on this device for 30 days. Browsing and creating need no website account.
+          </p>
+        )}
         {identity.pubkey && (
           <div className="identity-current">
             <span className="muted">
@@ -141,7 +169,11 @@ export function IdentityMenu({
                 View & edit your profile
               </Link>
             </Button>
-            <Button variant="outline" asChild><Link to="/manage" onClick={() => changeOpen(false)}>Your napplets</Link></Button>
+            <Button variant="outline" asChild>
+              <Link to="/manage" onClick={() => changeOpen(false)}>
+                Your napplets
+              </Link>
+            </Button>
             {adminAccess === 'authorized' && (
               <Button variant="outline" asChild>
                 <Link to="/admin" onClick={() => changeOpen(false)}>
@@ -268,78 +300,38 @@ export function IdentityMenu({
               key={value}
               variant={method === value ? 'default' : 'outline'}
               aria-pressed={method === value}
-              onClick={() => {
-                cancel();
-                setMethod(value);
-              }}
+              onClick={() => selectMethod(value)}
             >
               <Icon size={15} />
               {label}
             </Button>
           ))}
         </div>
-        <label className="identity-consent">
-          <input
-            type="checkbox"
-            checked={method === 'key' || method === 'create' ? rememberKey : remember}
-            disabled={busy}
-            onChange={(event) =>
-              method === 'key' || method === 'create'
-                ? setRememberKey(event.target.checked)
-                : setRemember(event.target.checked)
-            }
-          />
-          Remember this {method === 'key' || method === 'create' ? 'private key' : 'connection'} on
-          this device
-        </label>
-        <p className="muted session-storage-note">
-          Saved credentials are encrypted in this browser, never saved on our server. Anyone with
-          access to this browser, or code running on this website, can use them. Use only a trusted
-          device; keep a separate recovery backup. Extensions keep your private key outside the
-          website.
-        </p>
+        {method && (
+          <label className="identity-consent">
+            <input
+              type="checkbox"
+              checked={method === 'key' || method === 'create' ? rememberKey : remember}
+              disabled={busy && !editableRemember}
+              onChange={(event) => {
+                if (method === 'key' || method === 'create') setRememberKey(event.target.checked);
+                else {
+                  rememberChoice.current = event.target.checked;
+                  setRemember(event.target.checked);
+                }
+              }}
+            />
+            Remember this {method === 'key' || method === 'create' ? 'private key' : 'connection'}{' '}
+            on this device
+          </label>
+        )}
         {method === 'extension' && (
-          <>
-            <p className="muted">
-              Use your NIP-07 browser extension. Your private key stays with your signer.
-            </p>
-            <Button
-              disabled={busy}
-              onClick={() => run(() => browserIdentity().extension(remember))}
-            >
-              Connect browser extension
-            </Button>
-          </>
+          <Button disabled={busy} onClick={() => run(() => browserIdentity().extension(remember))}>
+            Connect browser extension
+          </Button>
         )}
         {method === 'remote' && (
           <>
-            <p className="muted">
-              Scan a connection code in your NIP-46 signer, or paste a bunker link it provides. Your
-              private key stays on that device.
-            </p>
-            <label className="identity-field">
-              Signer relay
-              <input
-                type="url"
-                value={relay}
-                disabled={busy}
-                onChange={(e) => setRelay(e.target.value)}
-                spellCheck={false}
-              />
-            </label>
-            <p className="muted">
-              This relay carries encrypted signing requests. Publishing destinations stay unchanged.
-            </p>
-            <Button
-              disabled={busy}
-              onClick={() =>
-                run((onAuth, onPairing) =>
-                  browserIdentity().pair([relay.trim()], onPairing, { onAuth }, remember),
-                )
-              }
-            >
-              Create connection code
-            </Button>
             {uri && (
               <div className="identity-pairing">
                 <LightningCode
@@ -370,32 +362,67 @@ export function IdentityMenu({
                 <textarea aria-label="Connection link" readOnly value={uri} rows={3} />
               </div>
             )}
-            {!uri && (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                const link = secret;
+                setSecret('');
+                void run(
+                  (onAuth) =>
+                    browserIdentity().bunker(link, { onAuth }, () => rememberChoice.current),
+                  { editableRemember: true },
+                );
+              }}
+              className="identity-form"
+            >
+              <label className="identity-field">
+                Bunker URI
+                <input
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={secret}
+                  onChange={(e) => setSecret(e.target.value)}
+                  placeholder="bunker://…"
+                />
+              </label>
+              <Button variant="outline" disabled={!secret.trim()}>
+                Connect bunker
+              </Button>
+            </form>
+            <Button
+              variant="ghost"
+              aria-expanded={showRelay}
+              onClick={() => setShowRelay(!showRelay)}
+            >
+              {showRelay ? 'Hide signer relay' : 'Change signer relay'}
+            </Button>
+            {showRelay && (
               <form
+                className="identity-form identity-relay-form"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  const link = secret;
-                  setSecret('');
-                  void run((onAuth) => browserIdentity().bunker(link, { onAuth }, remember));
+                  startRemotePairing(relay);
                 }}
-                className="identity-form"
               >
                 <label className="identity-field">
-                  Bunker link
+                  Signer relay
                   <input
-                    type="password"
-                    autoComplete="off"
+                    type="url"
+                    value={relay}
+                    onChange={(e) => setRelay(e.target.value)}
                     spellCheck={false}
-                    value={secret}
-                    onChange={(e) => setSecret(e.target.value)}
-                    placeholder="bunker://…"
-                    disabled={busy}
                   />
                 </label>
-                <Button variant="outline" disabled={busy || !secret.trim()}>
-                  Connect bunker
+                <Button variant="outline" disabled={!relay.trim()}>
+                  Use signer relay
                 </Button>
               </form>
+            )}
+            {!busy && !uri && (
+              <Button variant="outline" onClick={() => startRemotePairing(relay)}>
+                Create new connection code
+              </Button>
             )}
           </>
         )}

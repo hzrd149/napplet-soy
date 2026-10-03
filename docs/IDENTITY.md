@@ -164,8 +164,14 @@ of commands; the presentation is an anchored popup. Session and key handling are
 
 
 The shell and social prompts open the same account chooser. Choose a NIP-07
-extension, create a NIP-46 connection code/link, paste a `bunker://` link, or import
-an nsec/hex private key after acknowledging the warning. The selected account signs
+extension, a NIP-46 remote signer, or a private-key flow. After a method is selected,
+the chooser hides its general guidance and shows only the controls needed for that
+method. Selecting a remote signer immediately creates a connection QR and link using
+`wss://relay.napplet.soy`; an optional secondary control changes the signer relay and
+regenerates the one-time connection. Switching methods and returning to the remote
+signer keeps the selected relay. A signer-provided `bunker://` URI can be pasted
+below the QR as an alternative. Importing an nsec/hex private key still requires an
+explicit risk acknowledgment. The selected account signs
 comments, likes, identified zaps, profile editing, named links and admin authentication.
 The website also signs explicitly composed kind-1 share notes (2026-09-24 source).
 Existing remote signers may request approval for `sign_event:1`; refusal preserves
@@ -181,8 +187,11 @@ and custom `BaseAccount` adapter own selection, serialization and queued signing
 This is the user-confirmed package; no `applesauce/session` export is used. It is
 compatible with our pinned core 6.2.0 and signers 6.2.2.
 
-**Remember this connection** defaults on for extensions and NIP-46. **Remember this
-private key** defaults off for imported/generated keys and has an explicit device
+**Remember this connection** defaults on for extensions and NIP-46. During QR or
+bunker pairing the choice remains editable; its value when the signer connects
+determines whether the session is saved. Changing it does not regenerate the QR or
+restart approval. An unchecked connection is visit-only and is not restored after
+reload. **Remember this private key** defaults off for imported/generated keys and has an explicit device
 risk explanation. Without it, keys stay in the current tab's memory. The chooser
 lists up to eight accounts and allows selection or forgetting; connecting a different
 account retains the current one until the new signer verifies. Each remembered
