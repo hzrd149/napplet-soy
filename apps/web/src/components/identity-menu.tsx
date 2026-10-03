@@ -40,6 +40,7 @@ export function IdentityMenu({
   type Method = 'extension' | 'remote' | 'key' | 'create';
   const [method, setMethod] = useState<Method | null>(null);
   const [busy, setBusy] = useState(false);
+  const [editableRemember, setEditableRemember] = useState(false);
   const [error, setError] = useState('');
   const [uri, setUri] = useState('');
   const [auth, setAuth] = useState('');
@@ -50,12 +51,14 @@ export function IdentityMenu({
   const [showRelay, setShowRelay] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [remember, setRemember] = useState(true);
+  const rememberChoice = useRef(remember);
   const [rememberKey, setRememberKey] = useState(false);
   const attempt = useRef(0);
   function cancel() {
     attempt.current++;
     browserIdentity().cancel();
     setBusy(false);
+    setEditableRemember(false);
     setUri('');
     setAuth('');
     setSecret('');
@@ -73,9 +76,11 @@ export function IdentityMenu({
       onAuth: (url: string) => Promise<void>,
       onPairing: (uri: string) => void,
     ) => Promise<void>,
+    options: { editableRemember?: boolean } = {},
   ) {
     const current = ++attempt.current;
     setBusy(true);
+    setEditableRemember(!!options.editableRemember);
     setError('');
     setUri('');
     setAuth('');
@@ -95,21 +100,29 @@ export function IdentityMenu({
     } finally {
       if (current === attempt.current) {
         setBusy(false);
+        setEditableRemember(false);
         setUri('');
         setAuth('');
       }
     }
   }
   function startRemotePairing(nextRelay = relay) {
-    void run((onAuth, onPairing) =>
-      browserIdentity().pair([nextRelay.trim()], onPairing, { onAuth }, remember),
+    void run(
+      (onAuth, onPairing) =>
+        browserIdentity().pair(
+          [nextRelay.trim()],
+          onPairing,
+          { onAuth },
+          () => rememberChoice.current,
+        ),
+      { editableRemember: true },
     );
   }
   function selectMethod(value: Method) {
     cancel();
     setMethod(value);
     setShowRelay(false);
-    if (value === 'remote') startRemotePairing(defaultSignerRelays[0]);
+    if (value === 'remote') startRemotePairing();
   }
   return (
     <Popover open={open} onOpenChange={changeOpen}>
@@ -299,14 +312,17 @@ export function IdentityMenu({
             <input
               type="checkbox"
               checked={method === 'key' || method === 'create' ? rememberKey : remember}
-              disabled={busy}
-              onChange={(event) =>
-                method === 'key' || method === 'create'
-                  ? setRememberKey(event.target.checked)
-                  : setRemember(event.target.checked)
-              }
+              disabled={busy && !editableRemember}
+              onChange={(event) => {
+                if (method === 'key' || method === 'create') setRememberKey(event.target.checked);
+                else {
+                  rememberChoice.current = event.target.checked;
+                  setRemember(event.target.checked);
+                }
+              }}
             />
-            Remember this {method === 'key' || method === 'create' ? 'private key' : 'connection'}
+            Remember this {method === 'key' || method === 'create' ? 'private key' : 'connection'}{' '}
+            on this device
           </label>
         )}
         {method === 'extension' && (
@@ -351,7 +367,11 @@ export function IdentityMenu({
                 event.preventDefault();
                 const link = secret;
                 setSecret('');
-                void run((onAuth) => browserIdentity().bunker(link, { onAuth }, remember));
+                void run(
+                  (onAuth) =>
+                    browserIdentity().bunker(link, { onAuth }, () => rememberChoice.current),
+                  { editableRemember: true },
+                );
               }}
               className="identity-form"
             >
