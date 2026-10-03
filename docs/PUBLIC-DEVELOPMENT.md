@@ -30,7 +30,11 @@ Replaceable manifests are selected by newest timestamp and then lowest event ID,
 
 Single-file `/index.html` artifacts are downloaded when their required domains are supported by the [public runtime profile](PUBLIC-RUNTIME.md). This includes the shell handshake, storage, identity reads, theme, resource loading, relay/outbox reads, common public-identifier helpers, links, and virtual file exports. Unsupported required domains remain visible on detail pages and gallery cards. Undeclared dependencies in older napplets may still prevent them from working; this is not full NAP conformance. The same host runs in development and production builds.
 
-Blossom artifact downloads use signed server hints, verify hashes and UTF-8, reject private/special network destinations at connection-time DNS lookup, and do not follow redirects. Downloads are size-limited to 10 MiB, with three workers, per-mirror timeouts, and a sixty-second total window. No remote URL is fetched on a page/OG request and no napplet code executes on the server. After the user starts playback, NAP resource requests use a separate bounded host endpoint; its policy is documented in [PUBLIC-RUNTIME.md](PUBLIC-RUNTIME.md).
+Blossom artifact downloads use signed server hints, verify hashes and UTF-8, reject private/special network destinations at connection-time DNS lookup, and do not follow redirects. Playable HTML downloads are size-limited to 25 MiB, with three workers, per-mirror timeouts, and a sixty-second total window. No remote URL is fetched on a page/OG request and no napplet code executes on the server. After the user starts playback, NAP resource requests use a separate bounded host endpoint with its unchanged 10 MiB resource limit; its policy is documented in [PUBLIC-RUNTIME.md](PUBLIC-RUNTIME.md).
+
+The 25 MiB artifact allowance is a source update; public website, indexer and
+runtime deployments must adopt it before admitting HTML above the former 10 MiB
+ceiling. Updating the creator's CLI alone does not update public services.
 
 The public cache lives exclusively under `.local/publicdev`, outside the production archive and build assets. It is reused for 15 minutes, refreshed on startup after that or when the runtime capability profile changes, and retained with its original timestamp when relays fail. `--refresh` bypasses the TTL. Public mode requires an explicit runtime switch, so saved public entries and their artifacts return 404 in ordinary local/production mode. Browser requests do not refresh this cache. An ordinary VPS deployment disables publicdev.
 

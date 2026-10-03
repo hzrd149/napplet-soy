@@ -171,9 +171,11 @@ assets sync in an existing project, rebuild and test. Format/extension recogniti
 is not decoding proof: exercise real data/media. Packs are not unpacked or converted.
 Raw HTML, SVG/XML and active-document markers remain blocked by resource policy;
 credential scans still apply. Only include assets you have permission to publish.
-Current budget: 32 assets, 10 MiB each, 32 MiB managed total, within 40 MiB/128 source
-files. Embedded bytes also consume the 10 MiB HTML budget. These are tooling limits,
-not hosting plans. Destination Blossom is configurable; provider quotas are unknown.
+Current budget: 32 assets, 10 MiB each, 32 MiB managed total, within 40 MiB/1,024 source
+and release files (including built HTML and previews), with a 50 MiB source tar.
+Embedded bytes also consume the 25 MiB HTML budget. The file count is a tooling
+safety budget, not a Nostr quota or hosting plan. Host resources still have their
+separate 10 MiB limit. Destination Blossom is configurable; provider quotas are unknown.
 There is no streaming/transcoding or out-of-Git large-original workflow yet.
 Use soyli project show or project set <json-file> for the manager metadata service.
 The JSON has name, title, description, topics and license. The manager's Changes,
@@ -266,6 +268,16 @@ When shared, code and pushed Git commit ancestry are public and open source by
 default. Ignoring a file does not erase its old committed contents. Keep private
 notes and generated state ignored and keys outside the project. The public source
 archive is the actual Git tree; ignored built HTML and previews are separate blobs.
+The hash-verifiable archive supports recovery, offline inspection and independent
+mirroring alongside the Git repository. The public website, indexer and runtime
+must deploy the 25 MiB artifact limit before admitting HTML above 10 MiB; a CLI
+update alone does not update them or an older website's source-browser file cap.
+publish.files only adds release inputs; it cannot narrow tracked source or history.
+Tracked files need no explicit list, and napplet.json stays limited to 16 KiB.
+Current source must use regular files. Safe internal file aliases may remain in
+older commits once removed or replaced at HEAD: each must resolve to a public
+regular file in that same committed tree. Absolute, escaping, dangling, cyclic,
+directory and private links remain blocked. A safe old alias needs no history rewrite.
 
 One remix supports both paths, in either order:
 - soyli publish releases your own version under its local publication identity.

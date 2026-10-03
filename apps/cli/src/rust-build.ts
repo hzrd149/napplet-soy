@@ -435,7 +435,7 @@ export async function buildWithRecipe(directory: string, recipe: Build, signal?:
     if (output.length > MAX_ARTIFACT_BYTES)
       throw fail(
         'WASM_SIZE',
-        `Embedded HTML is ${(output.length / 1048576).toFixed(2)} MiB; the limit is 10 MiB (decoded WASM: ${(wasm.length / 1048576).toFixed(2)} MiB).`,
+        `Embedded HTML is ${(output.length / 1048576).toFixed(2)} MiB; the limit is ${MAX_ARTIFACT_BYTES / 1048576} MiB (decoded WASM: ${(wasm.length / 1048576).toFixed(2)} MiB).`,
         'Disable unused engine features, use opt-level="s"/LTO/strip, and move media to NAP-RESOURCE. Compressed WASM is base64-embedded; external executable WASM is not supported.',
       );
     await builtConfiguration(output);
@@ -461,7 +461,7 @@ export async function buildWithRecipe(directory: string, recipe: Build, signal?:
       JSON.stringify(report, null, 2) + '\n',
     );
     console.error(
-      `WASM: ${(wasm.length / 1048576).toFixed(2)} MiB → HTML: ${(output.length / 1048576).toFixed(2)} / 10 MiB; memory ceiling: 256 MiB.`,
+      `WASM: ${(wasm.length / 1048576).toFixed(2)} MiB → HTML: ${(output.length / 1048576).toFixed(2)} / ${MAX_ARTIFACT_BYTES / 1048576} MiB; memory ceiling: 256 MiB.`,
     );
   } finally {
     await rm(stage, { recursive: true, force: true });

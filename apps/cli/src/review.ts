@@ -9,7 +9,7 @@ import { defaultTargets } from '../../../packages/publish/src/config';
 import { readBinding } from '../../../packages/publish/src/binding';
 import { committedSource } from '../../../packages/publish/src/git-source';
 import { sourceGit } from '../../../packages/grasp/src/client';
-import { sha256, type SignedEvent } from '../../../packages/protocol/src';
+import { MAX_ARTIFACT_BYTES, sha256, type SignedEvent } from '../../../packages/protocol/src';
 import { validateManifest } from '../../../packages/protocol/src/manifest';
 import { remixBytes } from '../../../packages/remix/src';
 import {
@@ -173,7 +173,7 @@ export async function review(
       try {
         const value = await bytes(
           `${server.replace(/\/$/, '')}/${release.artifactHash}`,
-          10 * 1024 * 1024,
+          MAX_ARTIFACT_BYTES,
         );
         if ((await sha256(value)) === release.artifactHash) {
           artifact = value;

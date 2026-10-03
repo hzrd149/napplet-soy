@@ -5,6 +5,7 @@ import ipaddr from 'ipaddr.js';
 import { remixSchema } from '../../protocol/src/remix';
 import { backendConfig } from '../../multiplayer/src/contracts';
 import discoveryRelays from '../../nostr/discovery-relays.json';
+import { MAX_SOURCE_FILES } from './limits';
 
 export class PublishError extends AccountError {
   constructor(
@@ -156,7 +157,7 @@ export const projectSchema = z
     publish: targetsSchema
       .partial()
       .extend({
-        files: z.array(z.string().max(200)).min(3).max(128).optional(),
+        files: z.array(z.string().max(200)).min(3).max(MAX_SOURCE_FILES).optional(),
         networks: z
           .object({
             public: targetsSchema.partial().optional(),

@@ -109,12 +109,27 @@ pinned event in both the installed-CLI and install-and-remix commands.
 
 The signed `source-archive` URL must end in its SHA-256 digest (optionally `.tar`).
 The browser verifies downloaded bytes and uses the same Git-tar parser as the CLI:
-50 MiB archive, 40 MiB expanded files, 128 files, no traversal, symlinks, special
+50 MiB archive, 40 MiB expanded files, 1,024 files, no traversal, symlinks, special
 entries, conflicting paths or credential files. It never clones a repository, runs
 build/scripts, extracts to disk or renders HTML/SVG/Markdown as active documents.
 Lowlight 3.3.0 and selected Highlight.js 11.11.1 grammars produce text/span tokens;
 the tree uses native disclosure controls. This avoids loading an editor or the full
 language catalogue. These dependencies load with the source route, not the gallery.
+
+The 1,024-file limit is a 2026-10-03 source update shared by CLI remix and source
+browsing. It is a tooling safety budget, not a Nostr quota. Updating the CLI enables
+publishing and remixing projects beyond the former 128-file limit. Older website
+deployments need the updated parser to browse
+those archives; a CLI update alone does not update a website. Source availability
+and this inspection limit do not affect playback admission.
+
+The archive remains a portable source snapshot for recovery, offline inspection
+and independent mirroring; its signed hash identifies the same bytes wherever
+they are stored. It complements the repository's commit history.
+
+Playable HTML has a separate 25 MiB limit. Public website, indexer and runtime
+deployments must adopt that limit before admitting artifacts above the former
+10 MiB ceiling; a CLI release alone does not enable public playback of them.
 
 Only the selected file’s text is sent to the page. Text over 200 KiB and binary files
 have a download state; highlighting stops at 64 KiB. Unknown file extensions use

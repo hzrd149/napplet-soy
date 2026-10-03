@@ -1,5 +1,19 @@
 # NAP concepts and expansion review
 
+2026-10-03 source admission update: the shared publisher/remix/source-browser
+budget is 1,024 files, with the existing 40 MiB source and 50 MiB archive ceilings.
+The current source tree and archive still require regular files; safe internal
+file aliases may remain in earlier immutable Git trees. This is local tooling
+policy, with no NAP or manifest change. Retain NIP-5D `24711d9`, shim 0.30.0,
+SDK 0.24.4 and the existing protocol pins. Source metadata remains optional for
+every publisher and never affects playback. CLI and website parser rollout are
+separate; see [source browsing](REMIXING.md#browsing-a-releases-original-files).
+Playable HTML admission rises from 10 MiB to 25 MiB while managed resource,
+asset, upload and virtual-filesystem limits remain unchanged. These are local
+safety budgets, not Nostr quotas. The website, indexer and runtime must deploy
+the artifact change before admitting larger public HTML; a CLI release alone
+does not provide that deployment.
+
 2026-09-24 note sharing: rechecked official [NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md),
 [NIP-10](https://github.com/nostr-protocol/nips/blob/master/10.md),
 [NIP-24](https://github.com/nostr-protocol/nips/blob/master/24.md) and

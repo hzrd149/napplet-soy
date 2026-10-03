@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { nip19 } from 'nostr-tools';
@@ -18,7 +18,7 @@ import { loadRemix, createRemix } from '../../packages/remix/src';
 import { sha256, validateRelease } from '../../packages/protocol/src';
 import { sourceGit } from '../../packages/grasp/src/client';
 
-test('data assets publish, verify and repair on resume, and retain exact originals in a fresh remix', async () => {
+test('large sources and a 12 MiB game publish, resume data assets and retain history in a fresh remix', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'soy-publish-data-assets-'));
   const project = join(directory, 'original');
   let services: Awaited<ReturnType<typeof stack>> | undefined;
@@ -55,10 +55,20 @@ test('data assets publish, verify and repair on resume, and retain exact origina
     );
     await Bun.write(
       join(project, 'index.html'),
-      '<!doctype html><h1>Data asset transport fixture</h1>',
+      '<!doctype html><h1>Data asset transport fixture</h1>'.padEnd(12 * 1024 * 1024, ' '),
     );
     await Bun.write(join(project, 'LICENSE'), 'MIT');
     await Bun.write(join(project, '.gitignore'), '.napplet-space/\n');
+    await Bun.write(join(project, 'AGENTS.md'), 'Build a game.\n');
+    for (let i = 0; i < 140; i++)
+      await Bun.write(join(project, `src/level-${i}.ts`), 'export {};\n');
+    await symlink('AGENTS.md', join(project, 'CLAUDE.md'));
+    await sourceGit(project, ['init']);
+    await sourceGit(project, ['add', '.']);
+    await sourceGit(project, ['commit', '-m', 'Original guidance alias']);
+    const historicalCommit = await sourceGit(project, ['rev-parse', 'HEAD']);
+    await rm(join(project, 'CLAUDE.md'));
+    await Bun.write(join(project, 'CLAUDE.md'), 'Build a game.\n');
     const imported: ManagedAsset[] = [];
     for (const original of originals) {
       const asset = await importAsset(project, {
@@ -131,6 +141,10 @@ test('data assets publish, verify and repair on resume, and retain exact origina
     expect(interrupted).toBe(true);
     const journal = new Journal(project, 'local');
     const frozen = await journal.load((await journal.index()).active!);
+    expect(frozen.plan.files.length).toBeGreaterThan(128);
+    expect(frozen.plan.files.find((file) => file.path === 'index.html')?.size).toBe(
+      12 * 1024 * 1024,
+    );
     expect(frozen.receipts.snapshot).toBe(false);
     expect(frozen.plan.requires).toContain('resource');
     expect(frozen.plan.servers).toContain(proxy.url.origin);
@@ -186,6 +200,15 @@ test('data assets publish, verify and repair on resume, and retain exact origina
     await rm(project, { recursive: true });
     const remix = await createRemix(directory, 'fresh-remix', loaded);
     expect(remix.source).toBe('git');
+    expect(Bun.file(join(remix.directory, 'index.html')).size).toBe(12 * 1024 * 1024);
+    expect(await sourceGit(remix.directory, ['rev-parse', `${historicalCommit}^{commit}`])).toBe(
+      historicalCommit,
+    );
+    expect(
+      await sourceGit(remix.directory, ['ls-tree', historicalCommit, 'CLAUDE.md']),
+    ).toStartWith('120000 blob');
+    expect(await Bun.file(join(remix.directory, 'CLAUDE.md')).text()).toBe('Build a game.\n');
+    expect(await Bun.file(join(remix.directory, 'src/level-139.ts')).text()).toBe('export {};\n');
     expect((await validateAssets(remix.directory)).assets).toEqual(imported);
     for (const [index, asset] of imported.entries()) {
       expect(await assetBytes(remix.directory, asset)).toEqual(originals[index].bytes);

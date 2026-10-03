@@ -1,5 +1,6 @@
 import { sourceGit } from '../../../packages/grasp/src/client';
 import { regularFile, checkSource, MAX_SOURCE_BYTES } from '../../../packages/publish/src/project';
+import { MAX_SOURCE_FILES } from '../../../packages/publish/src/limits';
 import { sha256 } from '../../../packages/protocol/src';
 
 /** Snapshot bytes, the index and HEAD: an editor save must invalidate a reviewed action. */
@@ -13,7 +14,8 @@ export async function workingTree(directory: string) {
         .filter(Boolean),
     ),
   ].sort();
-  if (paths.length > 128) throw new Error('Keep the project within the 128 source file limit.');
+  if (paths.length > MAX_SOURCE_FILES)
+    throw new Error(`Keep the project within the ${MAX_SOURCE_FILES} source file limit.`);
   let total = 0;
   const files: { path: string; hash: string | null; bytes: number }[] = [];
   for (const path of paths) {

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { finalizeEvent } from 'nostr-tools';
 import { aggregateHash, sha256, type SignedEvent } from '../../protocol/src';
 import { freezeFixture as freezeSource } from '../../publish/src/testing';
+import { sourceGit } from '../../grasp/src/client';
 import { initializePolicy, updatePolicy } from '../../moderation/src/policy';
 import { createSourceBrowser, downloadSourceArchive, SOURCE_TEXT_LIMIT } from './source';
 
@@ -102,6 +103,32 @@ test('pinned archive tree, safe file projection, license, downloads and request 
   );
   expect((await service.download(input, true))?.bytes).toEqual(tar);
   expect(calls).toBe(1);
+});
+
+test('source browser lists and reads a pinned source archive beyond 128 files', async () => {
+  const folder = join(directory, 'many-files');
+  await Promise.all(
+    Array.from({ length: 129 }, (_, i) =>
+      Bun.write(join(folder, `file-${String(i).padStart(3, '0')}.ts`), `export const n = ${i};`),
+    ),
+  );
+  await sourceGit(folder, ['init', '--initial-branch=main']);
+  await sourceGit(folder, ['add', '.']);
+  await sourceGit(folder, ['commit', '-m', 'Source beyond the old file limit']);
+  const archive = join(folder, 'source.tar');
+  await sourceGit(folder, ['archive', '--format=tar', `--output=${archive}`, 'HEAD']);
+  const bytes = await Bun.file(archive).bytes();
+  const event = await manifest([
+    ['source-archive', `https://assets.example/${await sha256(bytes)}`],
+  ]);
+  const service = browser([event], async () => bytes);
+  const input = { revision: event.id, view: 'project' as const, file: 'file-128.ts' };
+  const view = await service.view(input);
+  expect(view?.files).toHaveLength(129);
+  expect(view?.selected).toMatchObject({ path: 'file-128.ts', text: 'export const n = 128;' });
+  expect((await service.download(input))?.bytes).toEqual(
+    new TextEncoder().encode('export const n = 128;'),
+  );
 });
 
 test('missing and invalid source remain explicit; verified HTML is an independent fallback', async () => {

@@ -91,8 +91,8 @@ image decoding, sound playback, font loading and video playback in the host. Ass
 registration does not convert formats, stream indefinitely or certify every scene.
 
 Limits: **32 assets, 10 MiB per file, 32 MiB total managed bytes**. Originals still
-count towards the **40 MiB / 128-file source budget**. Embedded bytes additionally
-count towards the **10 MiB HTML limit**, including encoding overhead. These are
+count towards the **40 MiB / 1,024-file source budget**. Embedded bytes additionally
+count towards the **25 MiB HTML limit**, including encoding overhead. These are
 client/tooling constraints, not a purchased or free hosting allowance. Third-party
 provider quotas are unknown; provider rejection is authoritative. Choose a custom
 Blossom in Manage project or the local publishing binding. Changing providers does
@@ -185,13 +185,15 @@ Refreshing skills or reinstalling the same old CLI does not update runtime suppo
 ## Where the bytes go
 
 - **Runtime:** embedded media goes inside the hash-addressed HTML uploaded to the
-  configured Blossom target. The HTML has a **10 MiB** limit, including base64's size
-  overhead. Keep videos especially small.
+  configured Blossom target. The HTML has a **25 MiB** limit, including base64's size
+  overhead. Each managed asset and host resource remains limited to **10 MiB**.
+  Keep videos especially small.
 - **Editable originals:** for a built boilerplate project, the publisher selects
-  Git-tracked and unignored files by default and includes them in the Git release and
-  its hash-addressed source archive. `publish.files` can override the selection.
-  Keep required original assets in that selection so a remix can rebuild the project.
-  Source currently permits **128 files / 40 MiB total**, with a **50 MiB tar** ceiling.
+  Git-tracked and unignored files by default. Commit required original assets so
+  the Git release and its hash-addressed source archive retain them for a remix.
+  `publish.files` adds release inputs; it cannot exclude tracked files or history.
+  Source permits **1,024 files / 40 MiB total**, including built HTML and preview
+  inputs in the selected count, with a **50 MiB tar** ceiling.
   Files must pass the source path, regular-file and credential checks. Asset licensing
   and original attribution belong in the source too.
 - **Gallery cover:** `napplet.json` preview settings and the screenshot workflow

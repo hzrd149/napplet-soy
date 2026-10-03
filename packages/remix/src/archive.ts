@@ -1,3 +1,5 @@
+import { MAX_SOURCE_FILES } from '../../publish/src/limits';
+
 /** Bounded Git tar reader. Never delegate untrusted extraction to tar or a shell. */
 export function sourceArchive(bytes: Uint8Array) {
   if (bytes.length > 50 * 1024 * 1024 || bytes.length % 512)
@@ -54,8 +56,10 @@ export function sourceArchive(bytes: Uint8Array) {
       if (type !== 53) {
         if (files.has(path)) throw new Error('Duplicate source file');
         total += size;
-        if (files.size >= 128 || total > 40 * 1024 * 1024)
-          throw new Error('Source archive exceeds limits');
+        if (files.size >= MAX_SOURCE_FILES)
+          throw new Error(`Source archive exceeds the ${MAX_SOURCE_FILES} source file limit.`);
+        if (total > 40 * 1024 * 1024)
+          throw new Error('Source archive exceeds the 40 MiB expanded source limit.');
         files.set(path, bytes.slice(offset + 512, end));
       }
     }

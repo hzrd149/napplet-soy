@@ -2,7 +2,7 @@ import { linkedMedia } from '../../protocol/src/linked-media';
 import { cachedVideoSchema } from '../../protocol/src/preview-video';
 import { z } from 'zod';
 import { nip19 } from 'nostr-tools';
-import { eventSchema, encodeAddress } from '../../protocol/src';
+import { eventSchema, encodeAddress, MAX_ARTIFACT_BYTES } from '../../protocol/src';
 import { validateManifest } from '../../protocol/src/manifest';
 import { missingDomains } from '../../runtime/src/capabilities';
 import { cachedPreviewSchema } from '../../protocol/src/preview';
@@ -26,12 +26,7 @@ export const publicNappletSchema = z.object({
   artifactHash: hex,
   aggregateHash: hex,
   naddr: z.string().max(4096).nullable(),
-  bytes: z
-    .number()
-    .int()
-    .min(0)
-    .max(10 * 1024 * 1024)
-    .nullable(),
+  bytes: z.number().int().min(0).max(MAX_ARTIFACT_BYTES).nullable(),
   domains: z.array(z.string()).max(256),
   relays: z.array(z.string().max(256)).max(8).default([]),
   sourceUrl: z.string().max(4096).nullable(),

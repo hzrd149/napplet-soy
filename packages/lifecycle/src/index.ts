@@ -1,6 +1,12 @@
 import ipaddr from 'ipaddr.js';
 import { nip19, type Filter, type EventTemplate } from 'nostr-tools';
-import { verifiedEvent, sha256, encodeAddress, type SignedEvent } from '../../protocol/src';
+import {
+  MAX_ARTIFACT_BYTES,
+  verifiedEvent,
+  sha256,
+  encodeAddress,
+  type SignedEvent,
+} from '../../protocol/src';
 import { validateManifest } from '../../protocol/src/manifest';
 import { appReferences, descriptorImages } from '../../protocol/src/preview';
 import { descriptorVideos } from '../../protocol/src/preview-video';
@@ -267,7 +273,7 @@ export async function planLifecycle(input: {
                     await response.body?.cancel();
                     continue;
                   }
-                  const bytes = await boundedBytes(response, 10 * 1024 * 1024);
+                  const bytes = await boundedBytes(response, MAX_ARTIFACT_BYTES);
                   if ((await sha256(bytes)) !== release.artifactHash) continue;
                   return unique(
                     [
@@ -543,7 +549,7 @@ export async function executeLifecycle(
           continue;
         }
         if (
-          (await sha256(await boundedBytes(response, 10 * 1024 * 1024))) === release.artifactHash
+          (await sha256(await boundedBytes(response, MAX_ARTIFACT_BYTES))) === release.artifactHash
         ) {
           present = true;
           break;

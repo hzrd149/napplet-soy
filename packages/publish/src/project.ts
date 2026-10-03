@@ -19,6 +19,7 @@ import { builtRequirements } from './artifact';
 import { effectiveProject } from './binding';
 import { committedSource, inspectHistory } from './git-source';
 import { readModule } from '../../dynamic-backends/src/module-source';
+import { MAX_SOURCE_FILES } from './limits';
 
 export const MAX_SOURCE_BYTES = 40 * 1024 * 1024;
 export type SourceFile = { path: string; hash: string; size: number };
@@ -38,7 +39,10 @@ export async function regularFile(root: string, path: string, limit: number) {
   for (const part of path.split('/')) {
     current = join(current, part);
     if ((await lstat(current)).isSymbolicLink())
-      throw new PublishError('SOURCE_PATH', 'Source symlinks are not supported.');
+      throw new PublishError(
+        'SOURCE_PATH',
+        `Source path ${path} contains a symlink. Replace it with a regular file or remove it, then save a checkpoint. Safe internal file aliases may remain in earlier commits; no history rewrite is needed for those aliases.`,
+      );
   }
   const file = await open(current, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
@@ -74,7 +78,7 @@ export function checkSource(path: string, bytes: Uint8Array) {
   )
     throw new PublishError(
       'SOURCE_SECRET',
-      'The source selection contains a private or generated file. Remove it from publish.files.',
+      'The source contains a private or generated path. Keep private and generated files out of public source and Git history.',
     );
   checkSourceContent(bytes);
 }
@@ -150,10 +154,10 @@ export async function inspectProject(
       ...(project.preview?.video ? [project.preview.video.file] : []),
     ]),
   ].sort();
-  if (selected.length > 128)
+  if (selected.length > MAX_SOURCE_FILES)
     throw new PublishError(
       'SOURCE_LIMIT',
-      'Select at most 128 public source files with publish.files.',
+      `This project selects ${selected.length} publication inputs; soyLI supports up to ${MAX_SOURCE_FILES}. The total includes Git-tracked and unignored files, the built entry and presentation assets. publish.files is additive and cannot exclude tracked files. Remove unnecessary files from Git tracking and ignore them before saving a checkpoint, or split a larger project.`,
     );
   if (!['index.html', 'napplet.json', 'LICENSE'].every((p) => selected.includes(p)))
     throw new PublishError(

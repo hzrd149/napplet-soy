@@ -3,6 +3,7 @@ import {
   decodeAddress,
   verifiedEvent,
   encodeAddress,
+  MAX_ARTIFACT_BYTES,
   type SignedEvent,
   type GallerySearch,
 } from '../../../../packages/protocol/src';
@@ -184,7 +185,7 @@ export async function hydrateNapplet(event: SignedEvent, hints: string[] = []) {
           },
         );
         const size = Number(response.headers.get('content-length'));
-        if (response.ok && (!size || size <= 10 * 1024 ** 2)) {
+        if (response.ok && (!size || size <= MAX_ARTIFACT_BYTES)) {
           n.availability = 'ready';
           n.bytes = size || previous?.bytes || null;
           break;

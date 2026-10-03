@@ -12,10 +12,10 @@ import {
 } from './index';
 import type { LifecycleIO } from './transport';
 
-async function fixture() {
+async function fixture(source = '<!doctype html><p>game</p>') {
   const signer = new PrivateKeySigner(),
     author = await signer.getPublicKey();
-  const bytes = new TextEncoder().encode('<!doctype html><p>game</p>'),
+  const bytes = new TextEncoder().encode(source),
     hash = await sha256(bytes);
   const tags = [
     ['title', 'Little world'],
@@ -133,6 +133,24 @@ test('unpublish is confirmed separately, preserves files, retries exact signatur
   expect(republish.events.listing.created_at).toBeGreaterThan(receipt.events.deletion.created_at);
   expect(republish.events.listing.id).not.toBe(f.current.id);
   expect(f.events.get(f.relays[0])!.some((e) => e.id === f.snapshot.id)).toBe(false);
+});
+test('large playable artifacts retain lifecycle resource inventory and republishing', async () => {
+  const asset = 'a'.repeat(64);
+  const f = await fixture(
+    `<!doctype html><p>Large game</p><!-- blossom:sha256:${asset} -->`.padEnd(
+      12 * 1024 * 1024,
+      ' ',
+    ),
+  );
+  const plan = await f.plan();
+  expect(plan.complete).toBe(true);
+  expect(
+    plan.blobs.some((blob) => blob.hash === asset && blob.labels.includes('Runtime asset')),
+  ).toBe(true);
+  const receipt = createLifecycleReceipt(plan, 'republish');
+  await executeLifecycle(receipt, { io: f.io, signer: f.signer, save: f.save });
+  expect(lifecycleFinished(receipt)).toBe(true);
+  expect(receipt.events.listing.tags).toContainEqual(['path', '/index.html', f.hash]);
 });
 test('deletion reports physical absence and a failed blob can be retried without redoing completed relay steps', async () => {
   const f = await fixture(),

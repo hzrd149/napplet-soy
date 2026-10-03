@@ -94,7 +94,7 @@ The runtime's protocol tuple `(dTag, aggregateHash)` does not replace the full p
 - Exactly one executable artifact: `/index.html`, UTF-8, containing the application's code, CSS, and required playable assets.
 - No CDN scripts, external fonts, dynamic imports fetched over the network, direct fetch/WebSocket calls, or service-worker dependencies in the initial profile.
 - Build-time dependencies are allowed. They are bundled into the result rather than resolved on the viewer's device.
-- Proposed limits: 10 MiB uncompressed playable artifact, 50 MiB source archive, 1 MiB cover, 64 KiB release descriptor. These are admission limits, subject to empirical tuning.
+- Playable HTML is limited to 25 MiB, its source archive to 50 MiB and signed events to 64 KiB. These are local admission limits, not NIP-5D quotas. The website, indexer and runtime must deploy the updated artifact limit before admitting HTML above the former 10 MiB ceiling; a CLI release alone is insufficient. Managed resources retain their separate 10 MiB limit. See [previews](PREVIEWS.md) for presentation limits.
 - The local preview and public player use the same runtime library and production bundle policy. A normal unsandboxed Vite page does not prove the napplet will run on the website.
 - Current host capabilities and operation limits are recorded in [PUBLIC-RUNTIME.md](PUBLIC-RUNTIME.md). Required domains are checked from the signed manifest for every napplet, including fixtures. Direct browser networking remains blocked; supported resource and relay operations go through the host.
 
@@ -145,6 +145,17 @@ If the newest signed current manifest is invalid or unavailable, surface that st
 ## 6. Source guarantees
 
 Every release made by our publisher should include retrievable source, an exact commit, a license, dependency lockfile, and the documented build recipe. This is a creator-tool default, not a requirement for indexing other publishers' manifests. Retain a source archive on Blossom for convenient inspection and recovery. Validate archive paths, links, expanded size, and file count before extracting; validate its tracked tree against the referenced Git revision before claiming it is that source.
+
+2026-10-03 source admission update: publication, remix and source browsing share a
+1,024-file tooling safety budget, not a Nostr quota. Source remains bounded to
+40 MiB and its tar to 50 MiB; the current release tree/archive contains only regular
+files. Older Git trees may
+retain safe aliases to public regular files within the same tree after removal or
+replacement at HEAD. This changes no manifest, signature, runtime capability or
+upstream pin. Existing 128-file website deployments need the updated source parser
+to inspect larger archives; optional source inspection never gates playback.
+The hash-verifiable archive remains portable for recovery, offline inspection and
+independent mirroring alongside the source repository.
 
 The publisher retains Git release refs so published commits remain reachable after branches move. It includes optional `source-commit` and `source-archive` provenance tags alongside the standard `source` repository URL. These two convenience tags are Space conventions, not protocol requirements; clients can ignore them and discover/play the same manifest. Large original media can be represented in a content-addressed source asset lockfile and restored during remix; every required source asset must be retained and hash-checked too. V1 can keep normal small assets in Git and introduce that lockfile only when needed.
 

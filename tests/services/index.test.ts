@@ -11,7 +11,7 @@ import { PublicationRelays } from '../../packages/publish/src/relay';
 import { confirmWebsite } from '../../packages/publish/src/website';
 import { aggregateHash, encodeAddress, identityAddress, sha256 } from '../../packages/protocol/src';
 
-test('native relay → independent index worker → production SSR → sandbox playback survives worker restart', async () => {
+test('12 MiB napplet: relay → index worker → production SSR → sandbox playback survives worker restart', async () => {
   const root = resolve(import.meta.dir, '../..');
   const directory = await mkdtemp(join(tmpdir(), 'napplet-index-services-'));
   const children: ReturnType<typeof Bun.spawn>[] = [];
@@ -70,7 +70,10 @@ test('native relay → independent index worker → production SSR → sandbox p
     });
     const origin = `http://127.0.0.1:${blossom.server.port}`;
     const bytes = new TextEncoder().encode(
-      '<!doctype html><title>Relay arrival</title><h1>Arrived through Nostr</h1><button onclick="this.textContent=\'It works\'">Try me</button>',
+      '<!doctype html><title>Relay arrival</title><h1>Arrived through Nostr</h1><button onclick="this.textContent=\'It works\'">Try me</button>'.padEnd(
+        12 * 1024 * 1024,
+        ' ',
+      ),
     );
     const hash = await sha256(bytes),
       signer = new PrivateKeySigner();

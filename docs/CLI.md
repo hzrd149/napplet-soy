@@ -365,6 +365,12 @@ before using Git history-filtering tools in a separate copy. Recheck the result
 with dry-run. soyLI never silently rewrites history or force-pushes it; existing
 public copies cannot be recalled by a local rewrite.
 
+Safe file aliases from older commits may remain once removed or replaced with
+regular files in the current tree. Each historical symlink must resolve to a public
+regular file inside that same committed tree; absolute, escaping, dangling, cyclic,
+directory and private links still fail. Replace a current safe alias, review and
+commit the change, then retry dry-run. That case does not require a history rewrite.
+
 Inspection is bounded to 10,000 reachable objects, 10,000 distinct historical
 blob/path pairs and 40 MiB of unique blob content. Each historical path is checked,
 including aliases of a blob also stored under a permitted path.
@@ -458,12 +464,22 @@ manager if additional dependencies need installation scripts.
 
 Publishing accepts a finished self-contained `index.html` or `dist/index.html`.
 For the upstream profile it selects Git-visible source files plus the built HTML,
-excluding ignored dependencies and private state. Existing byte limits, regular-file
-checks and credential detection apply. `publish.files` adds release inputs but cannot
-exclude committed Git history. The source repository contains the real committed
-source; ignored build output is uploaded separately as the playable Blossom artifact.
+excluding ignored dependencies and private state. The selected budget is **1,024
+files / 40 MiB**, including built HTML and preview files; the source tar stays capped
+at 50 MiB. The file count is a tooling safety budget, not a Nostr quota. Playable
+HTML is limited to **25 MiB**; managed assets and host resources retain their
+separate 10 MiB limits. Current source files must be regular files and pass credential checks.
+`publish.files` adds release inputs; it cannot exclude tracked files or committed
+history. Do not enumerate tracked files to reduce the selection: Git already finds
+them, and the complete `napplet.json` remains capped at 16 KiB.
+The source repository contains the real committed source; ignored build output is
+uploaded separately as the playable Blossom artifact.
 Required domains combine `napplet.json` with standard `napplet-requires` build
 metadata. The artifact and NIP-5D publication format are the same for both profiles.
+
+The public website, indexer and runtime need the updated 25 MiB artifact limit
+before admitting larger playable HTML. Updating the CLI alone is insufficient;
+older deployments also need the updated parser to browse source above 128 files.
 
 ## Building and releasing
 

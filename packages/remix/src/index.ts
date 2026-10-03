@@ -8,7 +8,13 @@ import { loopbackRelayUrl } from '../../nostr/src/relay-policy';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { nip19, type Filter } from 'nostr-tools';
-import { sha256, decodeAddress, identityAddress, type SignedEvent } from '../../protocol/src';
+import {
+  MAX_ARTIFACT_BYTES,
+  sha256,
+  decodeAddress,
+  identityAddress,
+  type SignedEvent,
+} from '../../protocol/src';
 import { validateManifest } from '../../protocol/src/manifest';
 import { remixLineage } from '../../protocol/src/remix';
 import { manifestTopics } from '../../protocol/src/topics';
@@ -128,7 +134,7 @@ export async function loadRemix(reference: string, network: Network, signal: Abo
     ...release.servers.map((s) => `${s.replace(/\/$/, '')}/${release.artifactHash}`),
   ]) {
     try {
-      const bytes = await remixBytes(new URL(url), network === 'local', signal, 10 * 1024 * 1024);
+      const bytes = await remixBytes(new URL(url), network === 'local', signal, MAX_ARTIFACT_BYTES);
       if ((await sha256(bytes)) === release.artifactHash) {
         artifact = bytes;
         break;

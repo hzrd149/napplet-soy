@@ -13,11 +13,15 @@ required: keep an ordinary Cargo project and add the local recipe below.
   projection or capability called `wasm`.
 - Executable WASM, JavaScript and CSS stay embedded in one HTML file. No external
   executable modules, dynamic network imports, raw networking or worker exemption.
-- 10 MiB final HTML. The build gzip-compresses WASM before base64 embedding;
+- 25 MiB final HTML. The build gzip-compresses WASM before base64 embedding;
   the decoded module is capped at 32 MiB. Source and
-  reachable Git history each have the existing 40 MiB budget; at most 128 source
-  files. The Rust linker sets a 256 MiB maximum linear memory. This is a build
+  reachable Git history each have the existing 40 MiB budget; at most 1,024 selected
+  source/release files, including built HTML and previews, and a 50 MiB source tar.
+  The Rust linker sets a 256 MiB maximum linear memory. This is a build
   profile, not a bound on the browser's total GPU/JavaScript memory usage.
+- The public website, indexer and runtime must deploy the 25 MiB artifact limit
+  before accepting HTML above the former 10 MiB ceiling. A CLI update alone is
+  insufficient. Managed assets and host resources retain their 10 MiB limits.
 - Threads, SharedArrayBuffer, WebGPU, WASI, native OS APIs and Godot are outside
   this initial qualification. A project can choose other tools, but its result
   must still work inside the same sandbox and limits.
@@ -160,7 +164,7 @@ Qualification uses Bevy **0.19.0** (the committed lock resolves its internal
 crates to 0.19.1) with default features disabled and only needed
 render/asset/window features plus `webgl2`. Do not turn on `default_platform`
 blindly: it also includes native/clipboard/threading features. Prefer the smallest
-feature set that renders your game. A general 3D project may exceed 10 MiB even if
+feature set that renders your game. A general 3D project may exceed 25 MiB even if
 a small 2D project fits; measure before promising support for an entire engine.
 For a minimal 3D feature set without `tonemapping_luts`, explicitly choose a
 LUT-free camera tonemapper such as `Tonemapping::None` or `Reinhard`. Bevy's default

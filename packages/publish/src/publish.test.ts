@@ -20,7 +20,9 @@ import {
   publicationStatus,
   type PublishOptions,
 } from './index';
-import { Journal } from './journal';
+import { Journal, readJson } from './journal';
+import { MAX_PUBLICATION_JOURNAL_BYTES } from './limits';
+import { projectSchema } from './config';
 import { newer } from './relay';
 import { appReferences, descriptorImages } from '../../protocol/src/preview';
 import { writeBinding } from './binding';
@@ -167,6 +169,44 @@ async function fixture() {
     close: () => rm(root, { recursive: true, force: true }),
   };
 }
+test('large valid publication journals round-trip without exceeding the bounded reader', async () => {
+  const f = await fixture();
+  try {
+    await publishProject(f.options);
+    const job = await f.load();
+    const directory = Array(4).fill('界'.repeat(40)).join('/');
+    job.plan.files = Array.from({ length: 1024 }, (_, i) => ({
+      path: `${directory}/${i}.ts`,
+      hash: 'a'.repeat(64),
+      size: 1,
+    }));
+    job.plan.sourceBytes = 1024;
+    expect(Buffer.byteLength(JSON.stringify(job, null, 2))).toBeGreaterThan(512 * 1024);
+    await f.journal.save(job);
+    expect((await f.journal.load(job.id)).plan.files).toEqual(job.plan.files);
+    job.plan.files.push({ path: 'overflow.ts', hash: 'b'.repeat(64), size: 1 });
+    await expect(f.journal.save(job)).rejects.toThrow();
+    const excessive = join(f.root, 'excessive.json');
+    await Bun.write(excessive, ' '.repeat(MAX_PUBLICATION_JOURNAL_BYTES + 1));
+    await expect(readJson(excessive)).rejects.toThrow();
+  } finally {
+    await f.close();
+  }
+});
+
+test('explicit additive source selections share the 1024-file bound', async () => {
+  const f = await fixture();
+  try {
+    const files = Array.from({ length: 1024 }, (_, i) => `${i}.ts`);
+    expect(projectSchema.safeParse({ ...f.config, publish: { files } }).success).toBe(true);
+    expect(
+      projectSchema.safeParse({ ...f.config, publish: { files: [...files, 'extra.ts'] } }).success,
+    ).toBe(false);
+  } finally {
+    await f.close();
+  }
+});
+
 test('an unpublished draft follows the selected creator instead of forcing its scaffold identity', async () => {
   const f = await fixture();
   try {

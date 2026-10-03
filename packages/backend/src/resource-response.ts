@@ -1,7 +1,9 @@
 import { blocked } from '../../moderation/src/policy';
 import { z } from 'zod';
 import { fetchPublicBytes, fetchPublicBlob, publicResourceUrl } from './blossom';
-import { MAX_ARTIFACT_BYTES, sha256 } from '../../protocol/src/artifact';
+import { sha256 } from '../../protocol/src/artifact';
+import { MAX_RESOURCE_BYTES } from '../../client/src/resource-limits';
+import { readBytes } from '../../client/src/bytes';
 
 export const resourceInput = z
   .object({
@@ -30,6 +32,7 @@ export async function resolveResource(
           server,
           digest,
           AbortSignal.any([signal, AbortSignal.timeout(8000)]),
+          MAX_RESOURCE_BYTES,
         );
         if ((await sha256(data)) === digest) {
           found = data;
@@ -41,13 +44,13 @@ export async function resolveResource(
     if (!found) throw new Error('network-error');
     bytes = found;
   } else if (input.url.startsWith('https:')) {
-    bytes = await fetchPublicBytes(publicResourceUrl(input.url), signal);
+    bytes = await fetchPublicBytes(publicResourceUrl(input.url), signal, MAX_RESOURCE_BYTES);
   } else if (input.url.startsWith('data:')) {
     // Normally decoded by the upstream shim. Keep raw envelope clients within the same policy.
     const response = await fetch(input.url, { signal });
-    bytes = new Uint8Array(await response.arrayBuffer());
+    bytes = await readBytes(response, MAX_RESOURCE_BYTES);
   } else throw new Error('unsupported-scheme');
-  if (bytes.length > MAX_ARTIFACT_BYTES) throw new Error('too-large');
+  if (bytes.length > MAX_RESOURCE_BYTES) throw new Error('too-large');
   if (blocked('hash', await sha256(bytes))) throw new Error('blocked-by-policy');
   return { bytes, mime: resourceMime(bytes, !!digest) };
 }

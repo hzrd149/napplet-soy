@@ -62,6 +62,30 @@ async function finish(workshop: Workshop) {
   }
   throw new Error('Workshop did not finish');
 }
+test('workshop snapshots accept 1024 source files and reject the 1025th file', async () => {
+  const f = await fixture();
+  try {
+    // The fixture already has four tracked files; untracked source must also count.
+    await Promise.all(
+      Array.from({ length: 1020 }, (_, i) =>
+        Bun.write(
+          join(f.directory, `src/file-${String(i).padStart(4, '0')}.ts`),
+          `export const n = ${i};`,
+        ),
+      ),
+    );
+    const state = await f.workshop.snapshot();
+    expect(state.tree.changed).toHaveLength(1020);
+    expect(state.tree.changed).toContain('src/file-1019.ts');
+    expect((await f.workshop.diff(state.tree.revision, 'src/file-1019.ts')).diff).toBe(
+      'export const n = 1019;',
+    );
+    await Bun.write(join(f.directory, 'src/overflow.ts'), 'export const overflow = true;');
+    await expect(f.workshop.snapshot()).rejects.toThrow('1024 source file limit');
+  } finally {
+    await f.close();
+  }
+});
 test('workshop rejects stale file and creator snapshots and checkpoints exactly the reviewed files', async () => {
   const f = await fixture();
   try {

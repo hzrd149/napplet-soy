@@ -145,10 +145,15 @@ Missing, unsupported, stale or inaccessible attachments do not hide a valid prop
 
 Bounds: up to 100 recent proposal roots plus an explicitly requested root, and 500
 related events per query; current Git profile
-supports 128 regular source files, 40 MiB of reachable blobs and 10,000 reachable objects.
-Symlinks, submodules, credential files and Git attributes/modules are unsupported in the
-managed creator profile. Git-backed automatic setup/build/publish currently expects
-a valid `napplet.json` and the supported entry/toolchain layout; foreign source can
+supports 1,024 regular source files, 40 MiB of reachable blobs and 10,000 reachable objects.
+The file count is a tooling safety budget, not a Nostr quota. Current source and
+archives require regular files; safe historical aliases to public regular files
+inside the same committed tree may remain after replacement or removal at HEAD.
+Unsafe links, submodules, credential files and Git attributes/modules remain blocked.
+Playable previews use the 25 MiB HTML limit; the public website, indexer and runtime
+must deploy that limit before admitting larger artifacts. Managed resources still
+have their separate 10 MiB limit. Git-backed automatic setup/build/publish currently
+expects a valid `napplet.json` and the supported entry/toolchain layout; foreign source can
 still be inspected with Git/ngit and adapted explicitly. This does not affect reading
 external proposals or playing their standard napplet manifests. No automatic history rewrite or legacy journal adoption is
 performed. Existing synthetic source journals need an explicit migration or a fresh

@@ -67,11 +67,27 @@ Each generated identifier is stable and independent of its title; older starter 
 
 ## Source and sandbox checks
 
-Tracked source and selected release inputs are inspected, up to 128 files and
-40 MiB; playable HTML is limited to 10 MiB. A nonempty LICENSE is required. Managed
-Git history is bounded to 10,000 reachable objects and 40 MiB of blobs. Regular
-relative paths are required; symlinks, submodules, Git attributes/modules, private
-state/dependency folders and likely credentials are refused. Git hooks are disabled.
+Tracked source and selected release inputs are inspected, up to **1,024 files and
+40 MiB**; the selected count includes built HTML and preview files. The source tar
+has a 50 MiB ceiling; playable HTML is limited to 25 MiB. The file count is a tooling
+safety budget, not a Nostr or creator quota. A nonempty LICENSE is required.
+`publish.files` adds inputs; it cannot narrow Git-visible source or hide history.
+Tracked files need no explicit
+enumeration, and the complete `napplet.json` remains limited to 16 KiB.
+
+The 25 MiB HTML allowance is separate from the unchanged 10 MiB limits for managed
+assets and host resources. The public website, indexer and runtime must deploy the
+updated artifact limit before they admit and play HTML above the former 10 MiB
+ceiling. Releasing or updating the CLI alone does not update those services.
+
+Managed Git history is bounded to 10,000 reachable objects, 10,000 historical
+file versions/paths and 40 MiB of blobs. The current tree and archive require
+regular files with supported relative paths. Safe historical file aliases may
+remain after their removal or replacement at HEAD: every alias must resolve to
+a public regular file in that same immutable tree. Absolute, escaping, dangling,
+cyclic, directory and private links remain blocked. A safe alias needs no history
+rewrite. Submodules, Git attributes/modules, private state/dependency folders and
+likely credentials are refused. Git hooks are disabled.
 
 The CLI builds source only on explicit publish/propose/build commands. Library
 callers supply their built artifact; checks and merely opening a review do not run
@@ -79,7 +95,10 @@ project scripts. Standard build metadata and required NAP domains are checked.
 
 The browser check runs the frozen HTML under our current shared host, CSP, opaque iframe sandbox and shim. It checks startup, the shell handshake, script errors and CSP violations, while blocking external network requests. It does not use an inherited preview server or modified runtime bundle. This is a startup smoke check, not comprehensive gameplay, performance, NAP, or external-service conformance testing. The compiler runs in a fresh Bun process to avoid the pinned runtime's known build/read issue after networking. The check report records the runtime profile and browser version.
 
-The archive is Git's tar of the exact frozen commit and contains the selected regular files. The playable artifact is the archived entry selected in `napplet.json`: `index.html`
+The archive is Git's tar of the exact frozen commit and contains its regular files.
+It remains a portable, hash-verifiable source snapshot for recovery, offline
+inspection and independent mirroring, alongside the Git repository and history.
+The playable artifact is the entry selected in `napplet.json`: `index.html`
 for legacy projects or `dist/index.html` for the upstream boilerplate. Built projects
 include Git-visible source files plus their ignored built HTML by default, so the
 release journal retains editable TypeScript, the locked toolchain configuration and

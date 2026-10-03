@@ -10,7 +10,8 @@ export async function verifiedDocument(
   expectedHash: string,
   prelude: string | ((verifiedHtml: string) => string) = 'window.napplet=Object.freeze({});',
 ) {
-  if (bytes.length > MAX_ARTIFACT_BYTES) throw new Error('This napplet exceeds the 10 MiB limit.');
+  if (bytes.length > MAX_ARTIFACT_BYTES)
+    throw new Error(`This napplet exceeds the ${MAX_ARTIFACT_BYTES / 1024 ** 2} MiB limit.`);
   if ((await sha256(bytes)) !== expectedHash)
     throw new Error('The downloaded creation does not match its expected hash.');
   const html = new TextDecoder('utf-8', { fatal: true }).decode(bytes);

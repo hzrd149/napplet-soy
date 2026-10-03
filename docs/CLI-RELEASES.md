@@ -3,6 +3,39 @@
 GitHub Releases distribute the standalone CLI independently of the website/VPS.
 The current published version is **0.23.6**.
 
+**0.23.7 prepared 2026-10-03 (Europe/Vienna), publication pending:**
+Fixes [issue #3](https://github.com/zeSchlausKwab/napplet-soy/issues/3).
+Publication, saved-job resume, remix, source browsing and the local workshop now
+share a 1,024-file source budget. The limit bounds local scanning and archive work;
+it is not a Nostr limit or a creator quota. `publish.files` remains additive and
+errors now explain the actual selection. Source and archive byte budgets remain
+40 MiB and 50 MiB, respectively.
+
+Safe internal file aliases such as `CLAUDE.md → AGENTS.md` may remain in older
+commits after replacement with regular files in the current tree. Each alias is
+validated against its own committed tree. Unsafe links and credentials remain
+blocked; no history is rewritten. Current-link and historical-link errors identify
+the cause and recovery steps.
+
+Playable HTML now permits 25 MiB across authoring, preview, publication, remix,
+indexing and playback. Individual managed assets and runtime resources retain
+their separate 10 MiB limits. Use `soyli update` and restart previews; optionally
+run `soyli skills update` to refresh existing project guidance. No project migration
+or history cleanup is needed for the reported safe historical alias.
+
+The public website/indexer/runtime must also be deployed to admit playable files
+above 10 MiB and browse archives above its old 128-file limit. The CLI release does
+not update a running host. Blossom already accepts these sizes; no Blossom quota
+change is required. Website deployment is pending.
+
+Local verification passes TypeScript and all 450 source tests (3,554 assertions).
+The native macOS ARM64 package passes five real-entrypoint tests (103 assertions),
+including 1,024/1,025 boundaries and a 12 MiB built artifact. Real local services
+verify large-source publication/resume/remix with historical aliases; the production
+website indexes and plays a 12 MiB napplet in Chromium and survives an indexer
+restart. Exact 25 MiB admission, over-limit rejection, hash/UTF-8 checks and the
+unchanged resource cap have regression coverage. Release CI is still pending.
+
 **0.23.6 published 2026-10-03 (Europe/Vienna):**
 [GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.23.6),
 source `f71162f9e869c98d3bb2791245c27aa95f928e50`.

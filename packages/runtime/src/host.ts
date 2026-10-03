@@ -1,6 +1,7 @@
 import type { ThemeSource } from './appearance';
 import { blossomBytes, downloadBytes, readBytes } from '../../client/src/bytes';
 import { resourceMime } from '../../client/src/resource-mime';
+import { MAX_RESOURCE_BYTES } from '../../client/src/resource-limits';
 import { z } from 'zod';
 import { HOST_REQUESTS, RUNTIME_DOMAINS } from './capabilities';
 import { scopedStorage } from './storage';
@@ -214,13 +215,13 @@ export function attachNappletHost(options: HostOptions) {
         const digest = /^blossom:sha256:([a-f0-9]{64})$/.exec(request.url)?.[1];
         const servers = [...new Set([...(request.servers ?? []), ...(options.servers ?? [])])];
         const bytes = digest
-          ? await blossomBytes(digest, servers, signal, undefined, options.localServers)
+          ? await blossomBytes(digest, servers, signal, MAX_RESOURCE_BYTES, options.localServers)
           : request.url.startsWith('data:')
-            ? await readBytes(await fetch(request.url, { signal }))
-            : await downloadBytes(request.url, signal, undefined, options.localServers);
+            ? await readBytes(await fetch(request.url, { signal }), MAX_RESOURCE_BYTES)
+            : await downloadBytes(request.url, signal, MAX_RESOURCE_BYTES, options.localServers);
         const blob = new Blob([new Uint8Array(bytes)], { type: resourceMime(bytes, !!digest) });
         resourceBytes += blob.size;
-        if (blob.size > 10 * 1024 * 1024 || resourceBytes > 128 * 1024 * 1024)
+        if (blob.size > MAX_RESOURCE_BYTES || resourceBytes > 128 * 1024 * 1024)
           throw new Error('quota-exceeded');
         return { blob, mime: blob.type };
       });

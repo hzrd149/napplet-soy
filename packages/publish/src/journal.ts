@@ -8,6 +8,7 @@ import { eventSchema } from '../../protocol/src';
 import { remixSchema } from '../../protocol/src/remix';
 import type { Network } from '../../identity/src/signer';
 import { PublishError, targetsSchema } from './config';
+import { MAX_SOURCE_FILES, MAX_PUBLICATION_JOURNAL_BYTES } from './limits';
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const commit = z.string().regex(/^[a-f0-9]{40}$/);
@@ -37,7 +38,7 @@ const planSchema = z
           })
           .strict(),
       )
-      .max(128),
+      .max(MAX_SOURCE_FILES),
     artifactHash: hash,
     sourceBytes: z
       .number()
@@ -185,8 +186,10 @@ export async function readJson(path: string) {
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const stat = await file.stat();
-    if (!stat.isFile() || stat.size > 512 * 1024) throw new Error();
-    return JSON.parse(await file.readFile('utf8'));
+    if (!stat.isFile() || stat.size > MAX_PUBLICATION_JOURNAL_BYTES) throw new Error();
+    const bytes = await file.readFile();
+    if (bytes.length > MAX_PUBLICATION_JOURNAL_BYTES) throw new Error();
+    return JSON.parse(bytes.toString('utf8'));
   } finally {
     await file.close();
   }

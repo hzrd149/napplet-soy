@@ -1,4 +1,4 @@
-export const MAX_ARTIFACT_BYTES = 10 * 1024 * 1024;
+export const MAX_ARTIFACT_BYTES = 25 * 1024 * 1024;
 export async function sha256(bytes: Uint8Array | string) {
   const data = typeof bytes === 'string' ? new TextEncoder().encode(bytes) : bytes;
   const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(data));

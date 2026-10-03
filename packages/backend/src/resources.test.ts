@@ -4,13 +4,28 @@ import { createResourceResponder } from './resource-response';
 import { siteOrigin } from './site-origin';
 import { fetchPublicBytes, publicResourceUrl } from './blossom';
 import records from '../data/catalog.json';
-import { publicNapplet } from './public-model';
+import { publicNapplet, publicNappletSchema } from './public-model';
 import { RUNTIME_PROFILE } from '../../runtime/src/capabilities';
 import { finalizeEvent } from 'nostr-tools';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 const bytes = (s: string) => new TextEncoder().encode(s);
+test('public artifact metadata accepts 25 MiB while resources retain their 10 MiB cap', async () => {
+  const entry = await publicNapplet(records[0].current);
+  expect(publicNappletSchema.parse({ ...entry, bytes: 25 * 1024 * 1024 }).bytes).toBe(
+    25 * 1024 * 1024,
+  );
+  expect(() => publicNappletSchema.parse({ ...entry, bytes: 25 * 1024 * 1024 + 1 })).toThrow();
+  await expect(
+    resolveResource(
+      { url: 'data:text/plain,' + 'x'.repeat(10 * 1024 * 1024 + 1) },
+      [],
+      AbortSignal.timeout(5000),
+    ),
+  ).rejects.toThrow('too-large');
+});
+
 test('resources behind an HTTPS proxy admit only the configured host origin', async () => {
   const external = 'https://napplet.example';
   const respond = createResourceResponder(

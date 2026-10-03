@@ -2,6 +2,7 @@ import { sourceGit } from '../../grasp/src/client';
 import { PublishError } from './config';
 import { DiagnosticError } from '../../diagnostics/src';
 import { isLegacyPublicBackendContext, LEGACY_BACKEND_CONTEXT } from './legacy-backend-context';
+import { MAX_SOURCE_FILES } from './limits';
 
 export class SourceHistoryError extends DiagnosticError {
   readonly stage = 'check';
@@ -58,6 +59,26 @@ export async function inspectHistory(directory: string, commit: string) {
   const { checkSource, checkSourceContent } = await import('./project');
   let total = 0,
     legacyInCurrentTree = false;
+  const loadBlob = async (id: string) => {
+    let blob = blobs.get(id);
+    if (!blob) {
+      const size = Number(await sourceGit(directory, ['cat-file', '-s', id]));
+      total += size;
+      if (total > 40 * 1024 * 1024)
+        throw new PublishError(
+          'HISTORY_LIMIT',
+          'Public Git history exceeds the supported 40 MiB total. Keep large assets in Blossom.',
+        );
+      blob = {
+        size,
+        bytes: new TextEncoder().encode(
+          await sourceGit(directory, ['cat-file', 'blob', id], {}, 40 * 1024 * 1024),
+        ),
+      };
+      blobs.set(id, blob);
+    }
+    return blob;
+  };
   for (const revision of revisions) {
     const [containingCommit, treeId] = revision.split(':');
     if (trees.has(treeId)) continue;
@@ -66,21 +87,114 @@ export async function inspectHistory(directory: string, commit: string) {
       .split('\0')
       .filter(Boolean);
     if (containingCommit === commit) {
-      if (tree.length > 128)
+      if (tree.length > MAX_SOURCE_FILES)
         throw new PublishError(
           'SOURCE_LIMIT',
-          'This creator profile supports up to 128 tracked source files.',
+          `This source tree has ${tree.length} tracked files; soyLI supports up to ${MAX_SOURCE_FILES}. This is a tooling limit, not a creator quota.`,
         );
       legacyInCurrentTree = tree.some((entry) => entry.endsWith(`\t${LEGACY_BACKEND_CONTEXT}`));
     }
+    const entries = new Map<string, { mode: string; id: string }>();
+    const directories = new Set<string>();
     for (const entry of tree) {
-      const match = /^(100644|100755) blob ([a-f0-9]{40})\t(.+)$/.exec(entry);
-      if (!match || match[3].length > 200 || /[\\\s\u0000-\u001f\u007f]/.test(match[3]))
+      const match = /^(100644|100755|120000) blob ([a-f0-9]{40})\t(.+)$/.exec(entry);
+      if (
+        !match ||
+        match[3].length > 200 ||
+        match[3].split('/').some((part) => !part || part === '.' || part === '..') ||
+        /[\\\s\u0000-\u001f\u007f]/.test(match[3])
+      )
         throw new PublishError(
           'SOURCE_PATH',
-          `Git history at commit ${containingCommit} must contain regular files with supported relative paths, without symlinks or submodules.`,
+          `Git history at commit ${containingCommit} has an unsupported source path or entry. Submodules and special entries are not supported.`,
         );
-      const [, , id, path] = match;
+      const [, mode, id, path] = match;
+      entries.set(path, { mode, id });
+      const parts = path.split('/');
+      while (parts.pop() && parts.length) directories.add(parts.join('/'));
+    }
+    const resolvedLinks = new Map<string, string>();
+    const linkFailure = (path: string, id: string, cause?: PublishError) =>
+      new SourceHistoryError(
+        cause?.code ?? 'SOURCE_PATH',
+        `Git history contains a blocked source link: ${path}.`,
+        {
+          operation: 'inspect public Git history',
+          cause,
+          detail: `Blob: ${id}\nContaining commit: ${containingCommit}\nRelease commit: ${commit}`,
+          recovery:
+            containingCommit === commit
+              ? 'Replace this source link with a regular file or remove it, then save a checkpoint. Current release files must be regular files; safe historical in-repository file aliases may remain in earlier commits. No history rewrite is needed for a safe alias.'
+              : 'Historical source links must resolve to public regular files within the same committed tree. Absolute, escaping, private, dangling, cyclic and directory links are not supported. Review the recorded commit locally without sharing contents; back up the repository before any explicitly approved history cleanup. soyLI has not rewritten history.',
+        },
+      );
+    const resolveHistoricalLink = async (start: string) => {
+      const trail = new Set<string>();
+      let path = start;
+      for (;;) {
+        if (resolvedLinks.has(path)) {
+          path = resolvedLinks.get(path)!;
+          break;
+        }
+        if (trail.has(path))
+          throw new PublishError('SOURCE_PATH', 'Cyclic historical source link.');
+        const entry = entries.get(path);
+        if (!entry) throw new PublishError('SOURCE_PATH', 'Dangling or directory source link.');
+        checkSource(path, new Uint8Array());
+        if (entry.mode !== '120000') break;
+        trail.add(path);
+        const blob = await loadBlob(entry.id);
+        const target = new TextDecoder('utf-8', { fatal: true }).decode(blob.bytes);
+        // sourceGit trims text output. Exact byte length prevents that behavior
+        // from silently accepting whitespace or malformed bytes in a link target.
+        if (
+          blob.bytes.length !== blob.size ||
+          !target ||
+          target.length > 200 ||
+          target.startsWith('/') ||
+          /^[a-z]:/i.test(target) ||
+          /[\\\s\u0000-\u001f\u007f\ufffd]/.test(target)
+        )
+          throw new PublishError('SOURCE_PATH', 'Unsupported historical source link target.');
+        checkSourceContent(blob.bytes);
+        const parts = path.split('/').slice(0, -1);
+        const targetParts = target.split('/');
+        for (const [index, part] of targetParts.entries()) {
+          if (!part) throw new PublishError('SOURCE_PATH', 'Empty source link path component.');
+          if (part === '.') continue;
+          if (part === '..') {
+            if (!parts.length)
+              throw new PublishError('SOURCE_PATH', 'Source link escapes its tree.');
+            parts.pop();
+          } else {
+            parts.push(part);
+            const candidate = parts.join('/');
+            checkSource(candidate, new Uint8Array());
+            // Only file aliases are admitted. A link cannot stand in for a
+            // parent directory, including before a later ../ component.
+            if (index < targetParts.length - 1 && !directories.has(candidate))
+              throw new PublishError('SOURCE_PATH', 'Source link traverses a non-directory.');
+          }
+        }
+        path = parts.join('/');
+        if (path.length > 200)
+          throw new PublishError('SOURCE_PATH', 'Historical source link path exceeds its limit.');
+      }
+      for (const link of trail) resolvedLinks.set(link, path);
+    };
+    for (const [path, { mode, id }] of entries) {
+      if (mode === '120000') {
+        if (containingCommit === commit) throw linkFailure(path, id);
+        // Resolution depends on the containing tree, even when the exact same
+        // target-string blob and source path already passed in a newer commit.
+        try {
+          await resolveHistoricalLink(path);
+        } catch (cause) {
+          if (!(cause instanceof PublishError)) throw cause;
+          if (cause.code === 'HISTORY_LIMIT') throw cause;
+          throw linkFailure(path, id, cause);
+        }
+      }
       const key = `${id}:${path}`;
       if (checked.has(key)) continue;
       checked.add(key);
@@ -89,23 +203,7 @@ export async function inspectHistory(directory: string, commit: string) {
           'HISTORY_LIMIT',
           'This publisher supports up to 10,000 historical file versions/paths. Use ordinary Git for larger histories.',
         );
-      let blob = blobs.get(id);
-      if (!blob) {
-        const size = Number(await sourceGit(directory, ['cat-file', '-s', id]));
-        total += size;
-        if (total > 40 * 1024 * 1024)
-          throw new PublishError(
-            'HISTORY_LIMIT',
-            'Public Git history exceeds the supported 40 MiB total. Keep large assets in Blossom.',
-          );
-        blob = {
-          size,
-          bytes: new TextEncoder().encode(
-            await sourceGit(directory, ['cat-file', 'blob', id], {}, 40 * 1024 * 1024),
-          ),
-        };
-        blobs.set(id, blob);
-      }
+      const blob = await loadBlob(id);
       let publicLegacy = false;
       try {
         checkSourceContent(blob.bytes);
