@@ -1,9 +1,11 @@
 # soyLI releases and updates
 
 GitHub Releases distribute the standalone CLI independently of the website/VPS.
-The current published version is **0.23.6**.
+The current published version is **0.23.7**.
 
-**0.23.7 prepared 2026-10-03 (Europe/Vienna), publication pending:**
+**0.23.7 published 2026-10-03 (Europe/Vienna):**
+[GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.23.7),
+source `0456c03850570d2c8b8cd9ef41130639624c969d`.
 Fixes [issue #3](https://github.com/zeSchlausKwab/napplet-soy/issues/3).
 Publication, saved-job resume, remix, source browsing and the local workshop now
 share a 1,024-file source budget. The limit bounds local scanning and archive work;
@@ -34,7 +36,20 @@ including 1,024/1,025 boundaries and a 12 MiB built artifact. Real local service
 verify large-source publication/resume/remix with historical aliases; the production
 website indexes and plays a 12 MiB napplet in Chromium and survives an indexer
 restart. Exact 25 MiB admission, over-limit rejection, hash/UTF-8 checks and the
-unchanged resource cap have regression coverage. Release CI is still pending.
+unchanged resource cap have regression coverage.
+
+[Workflow 37133743916](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37133743916)
+passed the source gate and all four native build, installer/updater, sandbox and
+fresh-project checks. The first Intel macOS attempt reported Git unavailable in
+an existing onboarding test; retrying that job passed with the same source and
+checks. The original probe suppresses its process output, so its precise transient
+failure remains unconfirmed.
+
+All 11 release assets are public. Installer and manifest checksums, source revision
+and native matrix were verified. An isolated public macOS ARM64 installation reports
+0.23.7/current and passes the real CLI source-limit, 12 MiB artifact and historical
+alias regression (24 assertions). The user's installation and accounts were
+unchanged. No website deployment was performed.
 
 **0.23.6 published 2026-10-03 (Europe/Vienna):**
 [GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.23.6),
