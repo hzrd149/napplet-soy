@@ -2,7 +2,7 @@
 
 ## NIP-5D PR 7 migration — 2026-10-04
 
-New publications target `4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51`; old `24711d9` manifests remain readable/playable. See [the migration matrix and rollout](NIP5D-MIGRATION.md). The manifest publisher/parser changes while NAP runtime and upstream package pins stay unchanged. Existing upstream Paja acceptance is evidence for the legacy format only, not a claim that that client supports PR 7. This work is local source, not a release/deployment claim.
+soyLI 0.24.0 publications target `4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51`; old `24711d9` manifests remain readable/playable by the deployed dual reader. See [the migration matrix and rollout](NIP5D-MIGRATION.md) and [release evidence](CLI-RELEASES.md). The manifest publisher/parser changes while NAP runtime and upstream package pins stay unchanged. Existing upstream Paja acceptance is evidence for the legacy format only, not a claim that that client supports PR 7.
 
 Updated **2026-09-23**. This records the current implementation and
 evidence, not a declaration that every NAP is fully implemented. Configuration is

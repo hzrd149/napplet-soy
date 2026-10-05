@@ -56,7 +56,9 @@ of the discussion heading, a confirmed comment within 22 ms of acknowledgement,
 an anonymous invoice request in 357 ms from opening the zap dialog, and a gallery
 like in 510 ms from clicking. These fixture measurements isolate application waits;
 real signer approval, relay connection and Lightning-service latency still vary.
-This follow-up is implemented and locally verified, not deployed.
+This follow-up was deployed on 2026-10-05. Fresh live desktop/mobile checks also
+confirmed the updated napplet's restored 10,000-sat total; the local timings above
+are fixture measurements, not a public-network latency guarantee.
 
 ### Sharing a napplet as a Nostr note — 2026-09-24 source
 

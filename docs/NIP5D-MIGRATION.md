@@ -79,6 +79,25 @@ macOS ARM64 CLI passes migration confirmation/retry and safe source-alias/size
 checks (13 tests, 147 assertions). These are local verification results; the
 release rollout still requires production checks and all four native CI jobs.
 
+## Release rollout — 2026-10-05
+
+The dual reader/index/runtime and associated service policy were deployed first
+in `20261005090521302-87357`, with persistent index/service state preserved.
+Application, relay, Blossom, GRASP and health gates passed locally and on the VPS.
+Fresh live desktop/mobile checks confirmed the gallery order/options and restored
+10,000-sat total for the affected updated napplet, with no page errors. Its original
+receipt and a read-only metadata-conversion plan independently verified against
+the current manifest and exact published HTML. No public social event, payment
+or migration was posted as a test.
+
+Then [soyLI 0.24.0](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.24.0)
+was published from `a85da7dbd3f46f284dd163ba32628e84ddc90996` after
+[workflow 37289773986](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37289773986)
+passed the source gate, all four native jobs and release verification. Website
+installer/download references are advanced only after those public packages exist.
+Existing signed napplets and user-project histories are retained. External-client
+support for the new shape remains a separate qualification.
+
 ## Dedicated author migration
 
 soyLI 0.24.0 adds the opt-in `migrate <link> --dry-run` / `--confirm` / `--resume`

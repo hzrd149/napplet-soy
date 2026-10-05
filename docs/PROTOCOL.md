@@ -1,6 +1,6 @@
 # Napplet interoperability and publishing contract
 
-2026-10-04 manifest migration: new publications follow [dskvr/nips PR 7](https://github.com/dskvr/nips/pull/7) at `4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51`. The reader retains the previous format. See [migration semantics and rollout](NIP5D-MIGRATION.md); this source change is not deployed or released.
+2026-10-05 manifest rollout: soyLI 0.24.0 publications follow [dskvr/nips PR 7](https://github.com/dskvr/nips/pull/7) at `4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51`. The deployed reader retains the previous format. See [migration semantics and rollout](NIP5D-MIGRATION.md) and [release evidence](CLI-RELEASES.md).
 
 2026-09-23 public application-data source update: the shared host grants a
 constrained `relay.publish`/`outbox.publish` subset for kind-30078 records under

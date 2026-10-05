@@ -1,7 +1,45 @@
 # soyLI releases and updates
 
 GitHub Releases distribute the standalone CLI independently of the website/VPS.
-The current published version is **0.23.7**.
+The current published version is **0.24.0**.
+
+**0.24.0 published 2026-10-05 (Europe/Vienna):**
+[GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.24.0),
+source `a85da7dbd3f46f284dd163ba32628e84ddc90996`.
+[Workflow 37289773986](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37289773986)
+passed the source gate, all four native build/installer/updater/fresh-project jobs
+and verified release publication.
+
+Fresh publication uses the standalone NIP-5D manifest at `4d0fb2e`; existing
+publications remain supported by the legacy reader. Required/optional domains,
+icons, archetypes and intent discovery metadata are available in project metadata
+and the manager. The pinned runtime/SDK/plugin remain unchanged. Optional Soy
+source and presentation metadata never become playback requirements.
+
+`soyli migrate <napplet-link> --dry-run --json` verifies exact published HTML and
+previews an explicit metadata-only conversion. Original-author confirmation is
+required; retries reuse a saved signature outside Git. No rebuild, asset upload
+or history rewrite occurs. Named/root identity is retained; immutable snapshots
+remain unchanged. See [the creator guide](NIP5D-CREATOR.md).
+
+Safe current-tree source aliases such as `CLAUDE.md → AGENTS.md` now retain their
+Git links while source archives materialize exact committed contents. Unsafe
+links/private files remain blocked. Source limits remain 1,024 files/40 MiB and
+50 MiB archives; playable HTML remains 25 MiB.
+
+The compatible website reader was deployed before publishing this CLI. Addressed
+likes, comments and verified zaps survive pruned historical revisions. The gallery
+separates Newest from Recently updated and places filters below social rankings.
+NIP-46 browser connection labels distinguish browser, device format and public
+session suffix. Existing projects can run `soyli skills update`; a normal fresh
+publication upgrades their manifest, while frozen legacy jobs preserve their
+original resume contract. Independent clients need their own new-format reader.
+
+Local verification: TypeScript plus 545 source tests (4,421 assertions), real
+relay/Blossom/indexer/production-browser compatibility, compiled CLI migration and
+source alias checks (13 tests, 147 assertions), and live desktop/mobile checks.
+The affected updated napplet again displays its verified 10,000-sat total. No
+public test reaction, comment, invoice request or payment was created.
 
 **0.23.7 published 2026-10-03 (Europe/Vienna):**
 [GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.23.7),
