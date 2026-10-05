@@ -318,6 +318,9 @@ export async function planLifecycle(input: {
           return false;
         }
       });
+      // soyLI-hosted repositories share the napplet identifier. Any other repository is the
+      // creator's own NIP-34 project, which a napplet deletion must not remove.
+      const linked = ref.identifier !== key.split(':').slice(2).join(':');
       for (const r of ref.relays) {
         const relay = lifecycleEndpoint(r, 'relay', input.local);
         const announcements = await read(relay, {
@@ -334,7 +337,11 @@ export async function planLifecycle(input: {
           address: ref.address,
           relay,
           clone,
-          ...(shared ? { retained: 'Used by another napplet from this author.' } : {}),
+          ...(shared
+            ? { retained: 'Used by another napplet from this author.' }
+            : linked
+              ? { retained: 'Your own source repository is kept; soyLI did not create it.' }
+              : {}),
         });
       }
       if (!ref.relays.length)

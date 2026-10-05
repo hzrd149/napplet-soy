@@ -1,6 +1,7 @@
 import { ASSET_LOCK, parseAssets } from '../../assets/src';
 import { DiagnosticError } from '../../diagnostics/src';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { nip19 } from 'nostr-tools';
 import { join } from 'node:path';
 import { ProtocolClient } from '../../client/src/nostr';
 import { Accounts, captureAccount } from '../../identity/src/accounts';
@@ -54,12 +55,38 @@ export async function collaborationContext(options: CollaborationOptions) {
   ]);
   return { binding, project, targets, account, client };
 }
+/** The creator's own NIP-34 repository, configured or found among the Git remotes. */
+async function linkedRepository(
+  options: CollaborationOptions,
+  context: Awaited<ReturnType<typeof collaborationContext>>,
+) {
+  if (!context.account) return null;
+  const { selectRepository } = await import('../../publish/src/repository');
+  const { projectRepositoryReference } = await import('../../publish/src/config');
+  return selectRepository({
+    directory: options.directory,
+    pubkey: context.account.pubkey,
+    configured: projectRepositoryReference(context.project, options.network),
+    signal: options.signal,
+  });
+}
 export async function projectRepository(options: CollaborationOptions, client: ProtocolClient) {
   const binding = await readBinding(options.directory);
   if (binding?.upstream) return readRepository(client, binding.upstream.address);
   const context = await collaborationContext(options);
   context.client.close();
   if (!context.account) throw new Error('Select the project creator or open a repository address.');
+  const linked = await linkedRepository(options, context);
+  if (linked)
+    return readRepository(
+      client,
+      nip19.naddrEncode({
+        kind: 30617,
+        pubkey: linked.pubkey,
+        identifier: linked.identifier,
+        relays: linked.relays,
+      }),
+    );
   const { projectIdentity } = await import('../../publish/src/config');
   return readRepository(
     client,
@@ -516,9 +543,21 @@ export async function pushSource(options: CollaborationOptions) {
     ...options,
     accounts: await captureAccount(options.accounts ?? new Accounts(options.network)),
   };
-  const { client, account, targets } = await collaborationContext(options);
+  const context = await collaborationContext(options);
+  const { client, account, targets } = context;
   let signer: Awaited<ReturnType<Accounts['signer']>> | undefined;
   try {
+    const linked = await linkedRepository(options, context);
+    if (linked)
+      throw new DiagnosticError(
+        'SOURCE_LINKED',
+        'This project’s source lives in your own repository; soyLI does not push to it.',
+        {
+          operation: 'push source',
+          target: linked.address,
+          recovery: `Push with git or ngit to ${linked.origin === 'publish.repository' ? 'that repository' : linked.origin.replace(/^remote /, 'the remote ')}.`,
+        },
+      );
     const repository = await projectRepository(options, client);
     if (!account || account.pubkey !== repository.pubkey)
       throw new Error(

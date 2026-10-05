@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { PrivateKeySigner } from 'applesauce-signers';
-import { matchFilter, type EventTemplate } from 'nostr-tools';
+import { matchFilter, nip19, type EventTemplate } from 'nostr-tools';
 import { aggregateHash, sha256, type SignedEvent } from '../../protocol/src';
 import {
   createLifecycleReceipt,
@@ -290,4 +290,27 @@ test('known historical preview images remain in the deletion inventory; unpublis
   });
   expect(downloads).toBe(0);
   expect(unpublish.complete).toBe(true);
+});
+test('deleting a napplet keeps the creator’s own source repository but lists the hosted one', async () => {
+  const f = await fixture();
+  const npub = nip19.npubEncode(f.author);
+  const relay = encodeURIComponent('wss://git.example/');
+  const planFor = async (identifier: string) => {
+    const manifest = await f.sign({
+      ...f.current,
+      tags: [...f.current.tags, ['source', `nostr://${npub}/${relay}/${identifier}`]],
+    });
+    for (const rows of f.events.values()) rows.push(manifest);
+    return planLifecycle({ manifest, relays: f.relays, io: f.io });
+  };
+  const hosted = await planFor('world');
+  expect(hosted.repositories).toHaveLength(1);
+  expect(hosted.repositories[0].retained).toBeUndefined();
+  // After moving to their own repository, the earlier hosted copy is still deleted.
+  const own = await planFor('SuperSonicRCRevive');
+  const retained = Object.fromEntries(
+    own.repositories.map((r) => [r.address.split(':')[2], r.retained]),
+  );
+  expect(retained.world).toBeUndefined();
+  expect(retained.SuperSonicRCRevive).toContain('Your own source repository is kept');
 });
