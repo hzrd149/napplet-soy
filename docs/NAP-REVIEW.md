@@ -2,7 +2,7 @@
 
 ## NIP-5D standalone manifest migration — 2026-10-04
 
-Selected authority: [dskvr/nips PR 7](https://github.com/dskvr/nips/pull/7), head `4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51` (open when reviewed). New writer and explicit dual reader use the same unchanged kinds. New `x` is raw HTML SHA-256; description is plain-text content; `R`/`O`, `icon`, `z` and `i` are supported. Snapshot ancestry is optional provenance, never own-app identity. Legacy `24711d9` readers remain for existing publications.
+Selected authority: [dskvr/nips PR 7](https://github.com/dskvr/nips/pull/7), head `4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51` (open when initially reviewed; confirmed merged at the same head on 2026-10-05). New writer and explicit dual reader use the same unchanged kinds. New `x` is raw HTML SHA-256; description is plain-text content; `R`/`O`, `icon`, `z` and `i` are supported. Snapshot ancestry is optional provenance, never own-app identity. Legacy `24711d9` readers remain for existing publications.
 
 The announcement mentions screenshot tags and possible intent hints, but neither has a wire contract in this pinned PR. Existing optional screenshot/video descriptors remain; no screenshot tag, intent grant or dispatch message is invented. NIP-91 intersections are an opt-in query optimization with standard tag-filter fallback. All required domains are still checked locally.
 

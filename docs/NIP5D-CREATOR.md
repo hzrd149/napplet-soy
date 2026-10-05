@@ -2,8 +2,8 @@
 
 Fresh `soyli publish` and playable proposal previews use the standalone NIP-5D
 manifest from [dskvr/nips PR #7 at 4d0fb2e](https://github.com/dskvr/nips/blob/4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51/5D.md).
-This is the selected draft, not a claim that it has merged. The installed SDK,
-shim and Vite plugin keep their separately recorded pins.
+PR #7 merged at this revision on 2026-10-04; its unchanged head was verified on
+2026-10-05. The installed SDK, shim and Vite plugin keep their separately recorded pins.
 
 Edit `napplet.json`, use `soyli project show` / `soyli project set metadata.json`,
 or open **Capabilities and discovery** in `soyli dev`. These edits are ordinary

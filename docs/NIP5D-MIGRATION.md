@@ -1,6 +1,6 @@
 # NIP-5D standalone manifest migration
 
-This source targets [dskvr/nips PR 7 at `4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51`](https://github.com/dskvr/nips/blob/4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51/5D.md), reviewed on 2026-10-04 while the PR was open. It supersedes the writer contract at `24711d9c47bbdd07908bf1d52bf677d9cbc530f0`, retained by the legacy reader. Kinds remain **35129 / 15129 / 5129**. This document describes local implementation, not a deployed website or released CLI.
+This source targets [dskvr/nips PR 7 at `4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51`](https://github.com/dskvr/nips/blob/4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51/5D.md), reviewed on 2026-10-04 and confirmed merged at the unchanged head on 2026-10-05. It supersedes the writer contract at `24711d9c47bbdd07908bf1d52bf677d9cbc530f0`, retained by the legacy reader. Kinds remain **35129 / 15129 / 5129**. Deployment and CLI release verification are recorded separately below.
 
 ## Read old, publish new
 
@@ -70,6 +70,14 @@ Local verification on 2026-10-04:
 - Pinned Paja/upstream-builder/ngit interoperability passed 26 assertions for the **legacy format**. This does not qualify those external clients for PR 7.
 
 The regression suites also cover frozen legacy journal resume, fresh upgrade, third-party metadata bounds, identity isolation, moderation, signed history inventory, icon verification and cold legacy discovery. Tests use isolated local services; no remote publication, release or deployment is claimed.
+
+Additional local verification on 2026-10-05: TypeScript plus 545 source tests across
+129 files (4,421 assertions), production web build and Go relay race/integration
+checks pass. Fresh Chromium tests cover both formats and address-bound gallery
+social counts after the previous release disappears (68 assertions). The compiled
+macOS ARM64 CLI passes migration confirmation/retry and safe source-alias/size
+checks (13 tests, 147 assertions). These are local verification results; the
+release rollout still requires production checks and all four native CI jobs.
 
 ## Dedicated author migration
 
