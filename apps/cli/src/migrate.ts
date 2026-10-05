@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { mkdir } from 'node:fs/promises';
 import {
   captureAccount,
   outsideRepository,
@@ -48,6 +49,9 @@ export async function migrateCommand(options: {
     io = new LifecycleTransport(options.signal);
   let signer: CreatorSigner | undefined;
   try {
+    // A read-only preview does not require a creator account to have been set up.
+    // Its private journal still needs an existing parent for guarded child creation.
+    await mkdir(directory, { recursive: true, mode: 0o700 });
     return await journal.lock(async () => {
       let receipt: MigrationReceipt;
       if (options.resume || options.confirm) {

@@ -142,6 +142,9 @@ confirmation/signing, and its current/deletion state is checked again before
 writing. An unavailable mirror is reported and can be retried. This does not
 claim an atomic transaction across every Nostr relay. Plans/receipts are stored
 privately beside account state, outside project Git; no private key enters them.
+From soyLI 0.24.1, a preview also works before any account setup: the private plan
+directory is created without generating a key or selecting an identity. Signing
+still requires the original author's explicitly selected account and confirmation.
 
 This command supports named (`35129`) and root (`15129`) publications. Use the
 current `/n/` link; a superseded `/r/` revision cannot replace a newer release.

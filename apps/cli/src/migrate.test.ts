@@ -63,12 +63,12 @@ test('real migrate CLI previews, confirms, retries exact signatures, preserves o
   });
   const origin = `http://127.0.0.1:${server.port}`,
     relay = `ws://127.0.0.1:${server.port}/`;
-  const run = async (args: string[]) => {
+  const run = async (args: string[], accountHome = join(dir, 'accounts')) => {
     const child = Bun.spawn([...command, ...args, '--network', 'local', '--json'], {
       cwd: dir,
       env: {
         PATH: process.env.PATH,
-        SPACE_ACCOUNT_HOME: join(dir, 'accounts'),
+        SPACE_ACCOUNT_HOME: accountHome,
         SOYLI_DANGEROUS_PLAINTEXT_KEYS: '1',
       },
       stdin: 'ignore',
@@ -116,6 +116,12 @@ test('real migrate CLI previews, confirms, retries exact signatures, preserves o
     const old = current,
       ref = encodeAddress({ kind: 35129, pubkey: current.pubkey, identifier: 'fixture' }),
       base = ['migrate', ref, '--relay', relay];
+    const freshHome = join(dir, 'fresh-account-state');
+    const freshPreview = await run([...base, '--dry-run'], freshHome);
+    expect(freshPreview.code, freshPreview.out + freshPreview.err).toBe(0);
+    expect(JSON.parse(freshPreview.out).status).toBe('dry_run');
+    expect(await Bun.file(join(freshHome, 'accounts/local/accounts.json')).exists()).toBe(false);
+    expect(published).toHaveLength(0);
     const dry = await run([...base, '--dry-run']);
     expect(dry.code, dry.out + dry.err).toBe(0);
     const plan = JSON.parse(dry.out);
