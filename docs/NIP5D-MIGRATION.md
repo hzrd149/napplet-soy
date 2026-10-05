@@ -107,6 +107,14 @@ setup creates only its private plan directory; original-author confirmation and
 selection remain mandatory for signing. The compiled CLI's account-free preview
 also verifies the affected napplet's actual published HTML.
 
+Final website deployment `20261005095909023-57511` is active with the 0.24.1
+installer and four native download links. Production service/sandbox checks passed;
+web and index health agree on that release. A fresh public installation reports
+0.24.1/current and verifies the existing HTML in an account-free migration preview.
+Fresh live desktop/mobile browsers confirm the restored 10,000-sat total, both
+chronology options and gallery control order, without page errors or horizontal
+overflow at 390px. Persistent service/index state and existing signed events remain.
+
 ## Dedicated author migration
 
 soyLI 0.24.0 adds the opt-in `migrate <link> --dry-run` / `--confirm` / `--resume`

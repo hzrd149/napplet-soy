@@ -15,9 +15,18 @@ planning. The correction generates no key, selects no identity and signs/posts
 nothing; original-author selection and confirmation remain required for publication.
 The real entrypoint regression was red before the correction and passes afterward,
 including the compiled macOS ARM64 binary (31 assertions). TypeScript and all 545
-source tests pass (4,425 assertions). A completely fresh compiled CLI also verifies
-the actual public napplet's 1,063,318-byte HTML and prepares its conversion without
+source tests pass (4,425 assertions). A checksum-verified public installation reports
+0.24.1 as current through `doctor`. With a fresh account directory, it verifies the
+actual public napplet's 1,063,318-byte HTML and prepares its conversion without
 account setup or signing. All other 0.24.0 migration/compatibility behavior remains.
+
+The website is active in deployment `20261005095909023-57511`. Its installer and
+all four manual downloads point to 0.24.1. Fresh live desktop/mobile checks pass:
+gallery tools follow social rankings, both chronology options are present, the
+affected updated napplet shows its existing 10,000 sats, and no page errors or
+390px layout overflow occur. Web and persistent index health identify the same
+release. Application, relay, Blossom, GRASP and Linux backend sandbox gates passed
+before activation; persistent service/index data was retained.
 
 **0.24.0 published 2026-10-05 (Europe/Vienna):**
 [GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.24.0),
