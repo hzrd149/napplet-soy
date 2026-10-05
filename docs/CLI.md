@@ -457,6 +457,9 @@ The same real-registry tests run in deployment; no version assertion is relaxed.
   Chromium system libraries are listed at `/create#platforms` (`/cli` redirects to the same guide). The CLI never installs OS
   packages or invokes sudo. Alpine/musl and native Windows are not supported.
 - Installer: curl, tar, tty, SHA-256 utilities; HTTPS downloads with checksum verification.
+- Nix/NixOS (Linux): the flake package and `programs.soyli` module provide the
+  toolchain, Chromium and Git from the store and leave updates to Nix; see
+  [soyLI with Nix](NIX.md).
 - Binary/support files: `~/.local/share/napplet-space/releases/<version-platform-hash>`.
   Command symlinks: `~/.local/bin/soyli` and managed legacy `~/.local/bin/napplet-space`. `NAPPLET_INSTALL_DIR` and
   `NAPPLET_BIN_DIR` override these paths. Foreign existing commands are preserved.
@@ -474,6 +477,8 @@ The private Node 24.21.0 (Node 22.23.2 on macOS 11–13.4) and pnpm 10.8.0 toolc
 checksums and reused across projects. Its cache is
 `~/Library/Caches/napplet-space/toolchains` (macOS) or
 `~/.cache/napplet-space/toolchains` (Linux); `SPACE_TOOLCHAIN_CACHE` overrides it.
+Packagers can set both `SOYLI_NODE` (Node binary) and `SOYLI_PNPM` (`pnpm.cjs`)
+instead; soyLI then skips the downloads but still requires the pinned Node version.
 No global runtime or package manager is installed. Dependency installation uses
 `--frozen-lockfile --ignore-scripts`. Creators can explicitly run their own package
 manager if additional dependencies need installation scripts.

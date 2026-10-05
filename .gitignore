@@ -15,3 +15,6 @@ playwright-report/
 output/
 # Generated from the shared collaboration scene whenever Vite starts/builds.
 /apps/web/public/story/
+# Nix build output links.
+/result
+/result-*

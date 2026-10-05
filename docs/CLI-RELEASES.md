@@ -444,6 +444,8 @@ installer is running before removing the reported `.install-lock` directory.
 
 1. Update `apps/cli/distribution/version.json` and the `version=` line in
    `apps/web/public/install.sh` together. Update relevant feature/release notes.
+   If dependencies or pins changed, refresh the Nix hashes too
+   ([maintaining the package](NIX.md#maintaining-the-package)).
 2. Commit the change and push the commit, then its matching tag:
 
    ```sh
