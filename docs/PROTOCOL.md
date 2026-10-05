@@ -157,7 +157,7 @@ to inspect larger archives; optional source inspection never gates playback.
 The hash-verifiable archive remains portable for recovery, offline inspection and
 independent mirroring alongside the source repository.
 
-The publisher retains Git release refs so published commits remain reachable after branches move. It includes optional `source-commit` and `source-archive` provenance tags alongside the standard `source` repository URL. These two convenience tags are Space conventions, not protocol requirements; clients can ignore them and discover/play the same manifest. Large original media can be represented in a content-addressed source asset lockfile and restored during remix; every required source asset must be retained and hash-checked too. V1 can keep normal small assets in Git and introduce that lockfile only when needed.
+In its hosted repository the publisher retains Git release refs so published commits remain reachable after branches move. A creator can instead publish against their own NIP-34 repository, which soyLI references but never writes ([details](PUBLISHING.md#publishing-from-your-own-nip-34-repository)). There the creator keeps released commits reachable; the release commit must be in a ref of the repository's signed state and served by one of its clone URLs before publication. The `source` value keeps its ordinary `nostr://` shape, so this changes no manifest tag, admission rule or NIP-5D pin. It includes optional `source-commit` and `source-archive` provenance tags alongside the standard `source` repository URL. These two convenience tags are Space conventions, not protocol requirements; clients can ignore them and discover/play the same manifest. Large original media can be represented in a content-addressed source asset lockfile and restored during remix; every required source asset must be retained and hash-checked too. V1 can keep normal small assets in Git and introduce that lockfile only when needed.
 
 A creator signature and matching source archive prove what the creator published and claimed. They do not prove the HTML was built from that source. Initially label the association as creator-declared. Only show a stronger reproducible-build claim after an independent isolated rebuild reproduces the artifact hash. That verification is a later worker capability, not a prerequisite for every quick first publish.
 
@@ -270,6 +270,7 @@ confirmed absence, retained shared data and incomplete requests. No manifest
 extension or website deletion API is required. NIP-5D and NAP pins are unchanged.
 GRASP retains deleted repository archives for 90 days by default; copies and forks
 outside the selected services are not recalled.
+
 # Dynamic backend service extension (2026-09-25)
 
 The feature branch adds opt-in `soy.backends.v1` MCP tools over the existing

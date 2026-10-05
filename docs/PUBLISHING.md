@@ -13,7 +13,7 @@ bun run soyli publish --project /path/to/my-experiment --network local --resume
 
 Start the platform services with `bun run dev` or `bun run dev:prod`. Set up/select an account in the matching network profile. Install the sandbox-check browser once with `bunx playwright install chromium` in this checkout. Creators can also use the standalone `soyli` executable and public installer; see the [CLI guide](CLI.md).
 
-`--dry-run` prints the exact selected files, source size, creator, identifier, artifact hash and resolved service destinations. It does not open a signer, run code, contact a service, create a journal, or commit source. It lists remote and browser checks still required. `status` reads the local journal only; it does not claim to observe the current remote state. `--json` writes one structured result to stdout; publication errors include `code`, `message`, `stage` and `retryable`.
+`--dry-run` prints the exact selected files, source size, creator, identifier, artifact hash and resolved service destinations. It does not open a signer, run code, contact a service, create a journal, or commit source; the one exception is a NIP-05 lookup to resolve the owner of a `nostr://` Git remote. It reports the `sourceRepository` that publication would use. It lists remote and browser checks still required. `status` reads the local journal only; it does not claim to observe the current remote state. `--json` writes one structured result to stdout; publication errors include `code`, `message`, `stage` and `retryable`.
 
 An ordinary `publish` checks the current project. If a different unfinished release exists for the selected author, it stops and explains `--resume`. Explicit resume finishes that author's saved bytes and metadata even while the editor contains newer changes. Publish again afterward to release the newer revision. Pending releases belonging to other authors remain untouched and do not block this author. There is no implicit retargeting, discard, force-overwrite, or rollback command.
 
@@ -40,6 +40,50 @@ publication identity; automatic adoption/rewriting is not performed.
 One remix can be published independently and proposed upstream in either order.
 See [collaboration](COLLABORATION.md) for proposals, built review and maintainer actions.
 
+## Publishing from your own NIP-34 repository
+
+By default soyLI hosts the source: it announces a repository named after the
+napplet identifier on the `grasp` service and pushes `main` and release tags there.
+A project that already lives in its own NIP-34 repository can publish against that
+repository instead, so readers, remixers and proposals reach the place where
+development happens.
+
+soyLI chooses the repository in this order:
+
+1. `publish.repository` in the project configuration (`napplet.json` or
+   `.napplet-space/project.json`), optionally per network under
+   `publish.networks.<network>.repository`. It accepts an `naddr1…` address, a
+   `nostr://` clone URL or `30617:<pubkey>:<identifier>`.
+2. Otherwise, a Git remote whose URL is `nostr://…` and whose owner is the
+   publishing key. ngit URLs work, including NIP-05 owners such as
+   `nostr://example.com/relay.example.com/my-project`. Remotes owned by other keys,
+   such as a remix's `nostr` upstream remote, are ignored. Two owned repositories
+   stop publication until `publish.repository` selects one. A `nostr://` remote that
+   cannot be resolved also stops publication, with its cause, rather than falling
+   back to a second hosted repository.
+3. Otherwise, the hosted repository described above.
+
+The repository must belong to the publishing key. soyLI never signs its
+announcement or state and never pushes to it. Push the release commit first with
+`git push` or `ngit push`. Before signing, and again before announcing a resumed
+release, soyLI requires the commit to be contained in a ref of the repository's
+signed kind-30618 state, and a clone URL from the announcement to serve that ref
+at the signed tip. Otherwise publication stops with `SOURCE_NOT_PUSHED`, naming
+the commit to push. Any branch layout is accepted; there is no `main` requirement.
+
+The release's `source` tag becomes that repository's `nostr://` URL, and an
+optional preview descriptor's `repository` tag becomes its first clone URL.
+`source-commit` and `source-archive` are unchanged, so the exact source remains
+recoverable from Blossom even if the branch later moves. soyLI does not add
+release tags to your repository; keep released commits reachable there.
+`publish --dry-run` and the JSON result report `sourceRepository`.
+
+An existing napplet can move from the hosted repository to your own; the Git host
+check does not apply then. The earlier hosted repository is left in place for older
+releases. [Deleting the napplet](LIFECYCLE.md) removes hosted repositories but keeps
+your own. `soyli propose` and `soyli review` use your repository too, and `soyli
+push` refers you to Git or ngit.
+
 ## Destinations and identity
 
 | Profile | Primary relay                | Blossom                       | GRASP                     | Website route origin    |
@@ -63,7 +107,7 @@ The user's selected account determines the author of the next publication. A sav
 
 Publication history is separated by public key within each project/network. The same public key through a different signing method continues the same listing. Another public key creates a separate listing and repository; its history can coexist with the original in this folder. `status`, `publish --resume` and lifecycle operations follow the selected author. Legacy journals are imported without moving or deleting frozen releases. A resumed release always retains its original author and destinations.
 
-Each generated identifier is stable and independent of its title; older starter projects derive a stable 13-character identifier from their existing `previewId`. Changing the identifier, primary relay or Git host within one author's existing publication history still needs explicit migration. Blossom, website and mirrors can change for a new release. Restoring a lost journal is required to continue an existing remote identity safely; automatic journal adoption remains separate work; remix is supported.
+Each generated identifier is stable and independent of its title; older starter projects derive a stable 13-character identifier from their existing `previewId`. Changing the identifier, primary relay or hosted Git service within one author's existing publication history still needs explicit migration; moving to [your own repository](#publishing-from-your-own-nip-34-repository) does not. Blossom, website and mirrors can change for a new release. Restoring a lost journal is required to continue an existing remote identity safely; automatic journal adoption remains separate work; remix is supported.
 
 ## Source and sandbox checks
 
@@ -198,7 +242,8 @@ are runtime read/resource hints; they are never upload destinations.
 
 `relay` receives signed manifests and preview descriptors. `blossom` receives
 HTML, source archives and PNG previews. `grasp` must be a compatible NIP-34/GRASP
-Git service. `site` determines share links and indexing checks. `mirrors` are
+Git service; it is unused while `repository` or an owned `nostr://` remote selects
+[your own repository](#publishing-from-your-own-nip-34-repository). `site` determines share links and indexing checks. `mirrors` are
 best-effort extra copies after primary acknowledgement, not substitute primaries;
 set `mirrors: []` to disable them. A failed primary stops publication and leaves
 an exact resumable journal; it does not silently switch services.
