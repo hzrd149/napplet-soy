@@ -173,7 +173,10 @@ export async function editProject(root: string, network: Network, input: unknown
       };
       binding.project.publish = {
         ...effective.publish,
-        networks: { ...effective.publish?.networks, [network]: action.targets },
+        networks: {
+          ...effective.publish?.networks,
+          [network]: { ...effective.publish?.networks?.[network], ...action.targets },
+        },
       };
       await writeBinding(root, binding);
     } else if (action.action === 'asset') {

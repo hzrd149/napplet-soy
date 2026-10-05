@@ -14,6 +14,7 @@ import {
   verifiedEvent,
   type SignedEvent,
 } from '../../protocol/src';
+import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
 import { sourceGit, sourceUrls } from '../../grasp/src/client';
 import {
   publishProject as publishCommitted,
@@ -1101,6 +1102,119 @@ test('publishing unchanged code after an author deletion creates new current and
     expect(second.naddr).toBe(first.naddr);
     expect(second.snapshotId).not.toBe(first.snapshotId);
     expect(next.createdAt).toBeGreaterThan(deletion.created_at);
+  } finally {
+    await f.close();
+  }
+});
+test('a project with its own NIP-34 remote publishes against it without signing or pushing a second repository', async () => {
+  const f = await fixture();
+  const relay = 'ws://127.0.0.1:7777/';
+  const clone = 'http://127.0.0.1:9999/creator/my-repo.git';
+  const remote = (identifier: string, pubkey = f.creator.pubkey) =>
+    `nostr://${nip19.npubEncode(pubkey)}/${encodeURIComponent(relay)}/${identifier}`;
+  let served: Record<string, string> = {};
+  const listed: string[] = [];
+  f.deps.lsRemote = async (_directory, url, refs) => {
+    listed.push(url);
+    return refs
+      .filter((ref) => served[ref])
+      .map((ref) => `${served[ref]}\t${ref}`)
+      .join('\n');
+  };
+  let hosted = 0;
+  const source = f.deps.source!;
+  f.deps.source = async (input) => {
+    hosted++;
+    return source(input);
+  };
+  try {
+    // A first release used the soyLI-hosted repository.
+    await publishProject(f.options);
+    expect(hosted).toBe(1);
+    const commit = await sourceGit(f.project, ['rev-parse', 'HEAD']);
+    const signer = await f.accounts.signer();
+    const state = {
+      'refs/heads/master': commit,
+      'refs/heads/experiment': commit,
+    };
+    try {
+      for (const [identifier, refs] of [
+        ['my-repo', state],
+        ['other-repo', state],
+      ] as const) {
+        f.record(
+          relay,
+          await signer.signEvent({
+            kind: 30617,
+            created_at: 10,
+            content: '',
+            tags: [
+              ['d', identifier],
+              ['name', 'My repository'],
+              ['clone', clone, 'https://example.invalid/also.git'],
+              ['relays', relay],
+            ],
+          }),
+        );
+        f.record(
+          relay,
+          await signer.signEvent({
+            kind: 30618,
+            created_at: 10,
+            content: '',
+            tags: [['d', identifier], ...Object.entries(refs), ['HEAD', 'ref: refs/heads/master']],
+          }),
+        );
+      }
+    } finally {
+      await signer.close();
+    }
+    const other = getPublicKey(generateSecretKey());
+    // A remix upstream owned by another key is never used as this creator's repository.
+    await sourceGit(f.project, ['remote', 'add', 'upstream', remote('theirs', other)]);
+    await sourceGit(f.project, ['remote', 'add', 'origin', remote('my-repo')]);
+    const dry = await publishCommitted({ ...f.options, dryRun: true });
+    expect(dry).toMatchObject({
+      sourceRepository: { address: `30617:${f.creator.pubkey}:my-repo`, origin: 'remote origin' },
+    });
+
+    // The release commit is not yet in a ref that the clone serves.
+    const writes = [...f.writes];
+    await expect(publishCommitted(f.options)).rejects.toMatchObject({ code: 'SOURCE_NOT_PUSHED' });
+    expect(f.writes).toEqual(writes);
+    expect(hosted).toBe(1);
+
+    served = { ...state };
+    const result = await publishCommitted(f.options);
+    expect(result.sourceRepository).toEqual({
+      address: `30617:${f.creator.pubkey}:my-repo`,
+      origin: 'remote origin',
+      hosted: false,
+    });
+    expect(hosted).toBe(1);
+    expect(listed).toContain(clone);
+    const job = await f.load();
+    expect(job.current!.tags.find((t) => t[0] === 'source')).toEqual(['source', remote('my-repo')]);
+    expect(job.current!.tags.find((t) => t[0] === 'source-commit')).toEqual([
+      'source-commit',
+      commit,
+    ]);
+    expect(job.releaseRefs).toEqual({});
+    expect(job.source).toBeUndefined();
+    // Only the release events were written: no repository announcement or state.
+    const added = [...f.events.values()]
+      .flat()
+      .filter((e) => f.writes.slice(writes.length).includes(e.id));
+    expect(added.map((e) => e.kind).sort((a, b) => a - b)).toEqual([5129, 35129]);
+
+    // Unchanged source and repository reuse the release.
+    expect(await publishCommitted(f.options)).toMatchObject({ unchanged: true });
+
+    // Two owned NIP-34 remotes need an explicit choice.
+    await sourceGit(f.project, ['remote', 'add', 'mirror', remote('other-repo')]);
+    await expect(publishCommitted(f.options)).rejects.toMatchObject({
+      code: 'REPOSITORY_AMBIGUOUS',
+    });
   } finally {
     await f.close();
   }

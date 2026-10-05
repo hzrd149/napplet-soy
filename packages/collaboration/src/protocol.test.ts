@@ -1,7 +1,15 @@
 import { test, expect } from 'bun:test';
 import { PrivateKeySigner } from 'applesauce-signers/signers/private-key-signer';
 import { aggregateHash, sha256 } from '../../protocol/src';
-import { proposalsFromEvents, repositoryRef, validatePreview, type Repository } from './protocol';
+import { nip19 } from 'nostr-tools';
+import { diagnose } from '../../diagnostics/src';
+import {
+  proposalsFromEvents,
+  repositoryRef,
+  resolveRepositoryRef,
+  validatePreview,
+  type Repository,
+} from './protocol';
 const author = new PrivateKeySigner(),
   other = new PrivateKeySigner(),
   owner = new PrivateKeySigner();
@@ -97,4 +105,44 @@ test('preview is bound to exact Git commit, event author and descriptor bytes', 
       await author.signEvent({ ...revision, tags: [['c', 'b'.repeat(40)], tags[1]] }),
     ),
   ).rejects.toThrow('commit');
+});
+test('ngit NIP-05 repository URLs resolve their owner, relay hint and transport prefix', async () => {
+  const pubkey = await owner.getPublicKey();
+  const asked: string[] = [];
+  const fetch = (async (url: string) => {
+    asked.push(url);
+    return new Response(JSON.stringify({ names: { _: pubkey, alice: pubkey } }));
+  }) as unknown as typeof globalThis.fetch;
+  expect(
+    await resolveRepositoryRef('nostr://example.com/relay.example.com/My-Repo', { fetch }),
+  ).toEqual({
+    address: `30617:${pubkey}:My-Repo`,
+    pubkey,
+    identifier: 'My-Repo',
+    relays: ['wss://relay.example.com'],
+  });
+  expect((await resolveRepositoryRef('nostr://ssh/alice@Example.com/toy', { fetch })).address).toBe(
+    `30617:${pubkey}:toy`,
+  );
+  expect(asked).toEqual([
+    'https://example.com/.well-known/nostr.json?name=_',
+    'https://example.com/.well-known/nostr.json?name=alice',
+  ]);
+  // npub URLs need no lookup.
+  expect(
+    (await resolveRepositoryRef(`nostr://${nip19.npubEncode(pubkey)}/toy`, { fetch })).address,
+  ).toBe(`30617:${pubkey}:toy`);
+  expect(asked).toHaveLength(2);
+});
+test('a failed NIP-05 repository owner lookup keeps its cause and recovery', async () => {
+  const fetch = (async () =>
+    new Response('nope', { status: 503 })) as unknown as typeof globalThis.fetch;
+  const failure = await resolveRepositoryRef('nostr://example.com/toy', { fetch }).catch((e) => e);
+  const diagnostic = diagnose(failure);
+  expect(diagnostic.code).toBe('REPOSITORY_OWNER_LOOKUP');
+  expect(diagnostic.details).toContain(
+    'Cause (NIP05_STATUS): NIP-05 lookup returned an error status.',
+  );
+  expect(diagnostic.details).toContain('HTTP status: 503');
+  expect(diagnostic.recovery).toContain('publish.repository');
 });

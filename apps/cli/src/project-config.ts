@@ -57,7 +57,10 @@ export async function projectConfiguration(
   if (initialize) {
     project.publish = {
       ...project.publish,
-      networks: { ...project.publish?.networks, [network]: targets },
+      networks: {
+        ...project.publish?.networks,
+        [network]: { ...project.publish?.networks?.[network], ...targets },
+      },
     };
     const binding = (await readBinding(root)) ?? { version: 1 as const, project: {} };
     binding.project.publish = project.publish;

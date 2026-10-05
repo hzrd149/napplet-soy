@@ -62,6 +62,17 @@ export const jobSchema = z
     sourceBaseCommit: commit.nullable(),
     baseAnnouncement: hash.nullable(),
     repositoryAnnouncement: eventSchema.optional(),
+    // The creator's own NIP-34 repository. Present only when soyLI does not host the source.
+    repository: z
+      .object({
+        address: z.string().max(400),
+        origin: z.string().max(300),
+        relays: z.array(z.string().max(256)).max(8),
+        clones: z.array(z.string().max(512)).max(8),
+        source: z.string().max(1200),
+      })
+      .strict()
+      .optional(),
     commit,
     archiveHash: hash,
     archiveBytes: z
@@ -149,7 +160,7 @@ export const jobSchema = z
     (job) =>
       job.status !== 'announced_pending_index' ||
       ((!job.video || (!!job.preview && job.receipts.video === true)) &&
-        !!job.source &&
+        (!!job.source || !!job.repository) &&
         !!job.current &&
         !!job.snapshot &&
         (!job.preview ||
