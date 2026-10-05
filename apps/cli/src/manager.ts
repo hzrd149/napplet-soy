@@ -9,6 +9,7 @@ import {
   saveAssets,
   ASSET_LOCK,
   MAX_ASSET_BYTES,
+  assetMime,
 } from '../../../packages/assets/src';
 import {
   PublishError,
@@ -73,6 +74,11 @@ export async function manageProject(root: string, network: Network) {
       description: project.description,
       topics: project.topics,
       license: project.license,
+      requires: project.requires,
+      optionalDomains: project.optionalDomains ?? [],
+      archetypes: project.archetypes ?? [],
+      intents: project.intents ?? [],
+      icon: project.icon ?? null,
     },
     targets,
     preview: project.preview ?? {},
@@ -97,6 +103,11 @@ const changesSchema = z
     description: z.string().max(1000),
     license: z.string().min(1).max(100),
     topics: z.array(z.string().max(256)).max(32),
+    requires: projectSchema.shape.requires.removeDefault().optional(),
+    optionalDomains: projectSchema.shape.optionalDomains,
+    archetypes: projectSchema.shape.archetypes,
+    intents: projectSchema.shape.intents,
+    icon: projectSchema.shape.icon.nullable(),
   })
   .strict();
 export const managerAction = z.discriminatedUnion('action', [
@@ -139,7 +150,12 @@ export async function editProject(root: string, network: Network, input: unknown
   if (!parsed.success)
     throw new PublishError(
       'PROJECT_EDIT',
-      'Invalid edit. Check names, metadata lengths, storage mode and destinations.',
+      typeof input === 'object' && input !== null && 'action' in input && input.action === 'project'
+        ? 'Invalid project metadata. Supply a flat object with name, title, description, topics and license, plus optional discovery fields; do not pass the whole project show response. Each intent supports at most 14 parameter names. Check metadata lengths and icon format.'
+        : 'Invalid edit. Check names, metadata lengths, storage mode and destinations.',
+      'check',
+      false,
+      parsed.error,
     );
   const action = parsed.data;
   await mkdir(join(root, '.napplet-space'), { recursive: true, mode: 0o700 });
@@ -200,6 +216,19 @@ export async function editProject(root: string, network: Network, input: unknown
     } else {
       if (action.action === 'project') {
         Object.assign(project, action.changes);
+        if (action.changes.icon === null) delete project.icon;
+        if (project.icon) {
+          const bytes = await regularFile(root, project.icon.file, 5 * 1024 * 1024);
+          const mime = assetMime(bytes);
+          if (
+            !['image/png', 'image/jpeg', 'image/webp'].includes(mime) ||
+            (project.icon.mime && mime !== project.icon.mime)
+          )
+            throw new PublishError(
+              'PROJECT_EDIT',
+              'Choose a PNG, JPEG or WebP icon with a matching MIME type.',
+            );
+        }
         project.topics = projectTopics(project);
       } else if (action.action === 'select') {
         project.preview ??= {};

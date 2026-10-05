@@ -48,11 +48,11 @@ export class GallerySocialReader {
     const snapshot = (): GallerySocialData => {
       const rank = (field: 'likeCount' | 'commentCount' | 'msats') =>
         entries
-          .filter((n) => (this.counts.get(n.revisionId)?.[field] ?? 0) > 0)
+          .filter((n) => (this.counts.get(socialScope(n.manifest).key)?.[field] ?? 0) > 0)
           .sort(
             (a, b) =>
-              (this.counts.get(b.revisionId)?.[field] ?? 0) -
-                (this.counts.get(a.revisionId)?.[field] ?? 0) ||
+              (this.counts.get(socialScope(b.manifest).key)?.[field] ?? 0) -
+                (this.counts.get(socialScope(a.manifest).key)?.[field] ?? 0) ||
               b.manifest.created_at - a.manifest.created_at ||
               a.revisionId.localeCompare(b.revisionId),
           )
@@ -60,7 +60,7 @@ export class GallerySocialReader {
       return {
         counts: Object.fromEntries(
           entries.flatMap((n) => {
-            const count = this.counts.get(n.revisionId);
+            const count = this.counts.get(socialScope(n.manifest).key);
             if (!count) return [];
             const { likes, ...totals } = count;
             return [[n.revisionId, { ...totals, liked: !!viewer && likes.includes(viewer) }]];
@@ -71,7 +71,7 @@ export class GallerySocialReader {
           commented: rank('commentCount'),
           zapped: rank('msats'),
         },
-        refreshing: running || entries.some((n) => !this.counts.has(n.revisionId)),
+        refreshing: running || entries.some((n) => !this.counts.has(socialScope(n.manifest).key)),
       };
     };
     const emit = () => {
@@ -156,10 +156,10 @@ export class GallerySocialReader {
       const events = allowedEvents();
       for (const [i, n] of group.entries()) {
         const view = socialView(scopes[i], events, manifests);
-        const previous = this.counts.get(n.revisionId);
+        const previous = this.counts.get(socialScope(n.manifest).key);
         // Until a relay has answered, absent data remains unknown, not a fabricated zero.
         if (!complete && !previous && !view.likes.length && !view.comments.length) continue;
-        this.counts.set(n.revisionId, {
+        this.counts.set(socialScope(n.manifest).key, {
           likeCount: view.likeCount,
           likes: view.likes.map((e) => e.pubkey),
           commentCount: view.comments.filter((e) => !e.deleted).length,
@@ -175,8 +175,8 @@ export class GallerySocialReader {
       raw.set(event.id, event);
       if ([7, 1111].includes(event.kind) && !cachedAuthors.has(event.pubkey)) {
         cachedAuthors.add(event.pubkey);
-        for (const deletion of this.client.store
-          .getByFilters({ kinds: [5], authors: [event.pubkey] })
+        for (const deletion of this.client
+          .cached([{ kinds: [5], authors: [event.pubkey] }])
           .slice(0, 200)) {
           if (raw.size < 2000 && this.client.allowed(deletion)) raw.set(deletion.id, deletion);
         }
@@ -231,7 +231,7 @@ export class GallerySocialReader {
     try {
       // Cached deletions/revisions must apply before rendering cached reactions.
       const cached = dependencies();
-      if (cached.length) this.client.store.getByFilters(cached).forEach(add);
+      if (cached.length) this.client.cached(cached).forEach(add);
       await validateReferences();
       update();
       await this.client.query(filters, hints, signal, add);
@@ -270,8 +270,8 @@ export class GallerySocialReader {
                 } catch {}
             }
             signal.throwIfAborted();
-            const value = this.counts.get(n.revisionId)!;
-            this.counts.set(n.revisionId, {
+            const value = this.counts.get(socialScope(n.manifest).key)!;
+            this.counts.set(socialScope(n.manifest).key, {
               ...value,
               zapCount: totals?.zapCount ?? null,
               msats: totals?.msats ?? null,

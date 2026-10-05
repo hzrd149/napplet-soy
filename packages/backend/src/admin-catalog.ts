@@ -34,9 +34,14 @@ export async function adminCatalog(extraKeys: string[]): Promise<AdminCatalog> {
             )
           : null;
       const hashes = event.tags
-        .filter((t) => t[0] === 'path' && /^[a-f0-9]{64}$/.test(t[2] ?? ''))
-        .slice(0, 32)
-        .map((t) => ({ hash: t[2], label: (t[1] || 'Artifact').slice(0, 160) }));
+        .flatMap((t) => {
+          if (t[0] === 'x' && t.length === 2 && /^[a-f0-9]{64}$/.test(t[1]))
+            return [{ hash: t[1], label: '/index.html' }];
+          if (t[0] === 'path' && /^[a-f0-9]{64}$/.test(t[2] ?? ''))
+            return [{ hash: t[2], label: (t[1] || 'Artifact').slice(0, 160) }];
+          return [];
+        })
+        .slice(0, 32);
       entries.set(event.id, {
         id: event.id,
         pubkey: event.pubkey,

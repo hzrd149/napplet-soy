@@ -1,7 +1,15 @@
 import { test, expect } from 'bun:test';
 import { PrivateKeySigner } from 'applesauce-signers/signers/private-key-signer';
 import { aggregateHash, sha256 } from '../../protocol/src';
-import { proposalsFromEvents, repositoryRef, validatePreview, type Repository } from './protocol';
+import {
+  observeProposals,
+  proposalsFromEvents,
+  repositoryRef,
+  validatePreview,
+  type Repository,
+} from './protocol';
+import type { ProtocolClient } from '../../client/src/nostr';
+import { lastValueFrom, of, delay, timeout } from 'rxjs';
 const author = new PrivateKeySigner(),
   other = new PrivateKeySigner(),
   owner = new PrivateKeySigner();
@@ -33,6 +41,28 @@ async function fixture() {
   });
   return { repo, root };
 }
+test('progressive proposal reads finish empty lists and wait for related status before completing', async () => {
+  const { repo, root } = await fixture();
+  const emptyClient = {
+    allowed: () => true,
+    observeQuery: () => of([]),
+  } as unknown as ProtocolClient;
+  expect(await lastValueFrom(observeProposals(emptyClient, repo).pipe(timeout(200)))).toEqual([]);
+  const status = await owner.signEvent({
+    kind: 1631,
+    created_at: 4,
+    content: '',
+    tags: [['e', root.id, '', 'root']],
+  });
+  let reads = 0;
+  const client = {
+    allowed: () => true,
+    observeQuery: () => (++reads === 1 ? of([root]) : of([status]).pipe(delay(25))),
+  } as unknown as ProtocolClient;
+  const result = await lastValueFrom(observeProposals(client, repo).pipe(timeout(200)));
+  expect(reads).toBe(2);
+  expect(result[0].status).toBe('merged');
+});
 test('only the proposer can update a PR; status authority and comments follow NIP-34/NIP-22', async () => {
   const { repo, root } = await fixture();
   const update = {
@@ -63,38 +93,48 @@ test('only the proposer can update a PR; status authority and comments follow NI
   expect(p.status).toBe('closed');
   expect(proposalsFromEvents(repo, [root, fake, badStatus])[0].revision.id).toBe(root.id);
 });
-test('preview is bound to exact Git commit, event author and descriptor bytes', async () => {
-  const commit = 'a'.repeat(40),
-    hash = 'f'.repeat(64),
-    pubkey = await author.getPublicKey();
-  const manifest = await author.signEvent({
-    kind: 5129,
-    created_at: 1,
-    content: '',
-    tags: [
-      ['a', `35129:${pubkey}:preview`],
-      ['path', '/index.html', hash],
-      ['x', await aggregateHash([{ path: '/index.html', hash }]), 'aggregate'],
-      ['source-commit', commit],
-    ],
+for (const format of ['legacy', 'standalone'])
+  test(`${format} preview is bound to exact Git commit, event author and descriptor bytes`, async () => {
+    const commit = 'a'.repeat(40),
+      hash = 'f'.repeat(64),
+      pubkey = await author.getPublicKey();
+    const manifest = await author.signEvent({
+      kind: 5129,
+      created_at: 1,
+      content: format === 'standalone' ? 'A playable proposed improvement.' : '',
+      tags: [
+        ...(format === 'standalone'
+          ? [
+              ['x', hash],
+              ['R', 'storage'],
+              ['O', 'theme'],
+              ['i', 'napplet:track/edit', 'track'],
+            ]
+          : [
+              ['a', `35129:${pubkey}:preview`],
+              ['path', '/index.html', hash],
+              ['x', await aggregateHash([{ path: '/index.html', hash }]), 'aggregate'],
+            ]),
+        ['source-commit', commit],
+      ],
+    });
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({ version: 1, commit, manifest, check: { profile: 'test', browser: 'test' } }),
+    );
+    const tags = [
+      ['c', commit],
+      ['soy-preview', 'https://blossom.example/blob', await sha256(bytes), commit],
+    ];
+    const revision = await author.signEvent({ kind: 1618, created_at: 1, content: '', tags });
+    expect((await validatePreview(bytes, revision)).artifactHash).toBe(hash);
+    await expect(validatePreview(bytes.slice(1), revision)).rejects.toThrow('hash');
+    await expect(
+      validatePreview(bytes, await other.signEvent({ ...revision, tags })),
+    ).rejects.toThrow('author');
+    await expect(
+      validatePreview(
+        bytes,
+        await author.signEvent({ ...revision, tags: [['c', 'b'.repeat(40)], tags[1]] }),
+      ),
+    ).rejects.toThrow('commit');
   });
-  const bytes = new TextEncoder().encode(
-    JSON.stringify({ version: 1, commit, manifest, check: { profile: 'test', browser: 'test' } }),
-  );
-  const tags = [
-    ['c', commit],
-    ['soy-preview', 'https://blossom.example/blob', await sha256(bytes), commit],
-  ];
-  const revision = await author.signEvent({ kind: 1618, created_at: 1, content: '', tags });
-  expect((await validatePreview(bytes, revision)).artifactHash).toBe(hash);
-  await expect(validatePreview(bytes.slice(1), revision)).rejects.toThrow('hash');
-  await expect(
-    validatePreview(bytes, await other.signEvent({ ...revision, tags })),
-  ).rejects.toThrow('author');
-  await expect(
-    validatePreview(
-      bytes,
-      await author.signEvent({ ...revision, tags: [['c', 'b'.repeat(40)], tags[1]] }),
-    ),
-  ).rejects.toThrow('commit');
-});

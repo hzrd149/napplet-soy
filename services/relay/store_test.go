@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"fiatjaf.com/nostr"
@@ -63,6 +64,35 @@ func TestMetadataSearchAndFilters(t *testing.T) {
 	}
 	if got := events(s, nostr.Filter{IDs: []nostr.ID{wanted.ID}, Kinds: []nostr.Kind{1}}); len(got) != 0 {
 		t.Fatal("ID lookup bypassed kind filter")
+	}
+}
+
+func TestStandaloneContentAndCapabilityDiscovery(t *testing.T) {
+	s := testStore(t)
+	key := nostr.Generate()
+	now := nostr.Now()
+	for _, kind := range []nostr.Kind{35129, 15129, 5129} {
+		tags := nostr.Tags{{"x", strings.Repeat("a", 64)}, {"z", "feed"}, {"i", "napplet:feed/open", "relays"}, {"R", "relay"}, {"R", "storage"}, {"O", "theme"}}
+		if kind == 35129 {
+			tags = append(tags, nostr.Tag{"d", "feed"})
+		}
+		wanted := fixture(t, key, kind, now, tags, "A floating constellation reader")
+		put(t, s, wanted)
+		for _, search := range []string{"", "constellation", `"floating constellation"`} {
+			filter := nostr.Filter{Kinds: []nostr.Kind{kind}, Search: search, Tags: nostr.TagMap{"R": {"storage"}, "O": {"theme"}, "z": {"feed"}, "i": {"napplet:feed/open"}}}
+			got := events(s, filter)
+			if len(got) != 1 || got[0].ID != wanted.ID {
+				t.Fatalf("kind %d search %q: standard discovery filters missed the manifest: %v", kind, search, got)
+			}
+		}
+	}
+	for _, tags := range []nostr.TagMap{{"R": {"theme"}}, {"O": {"relay"}}, {"z": {"profile"}}, {"i": {"relays"}}} {
+		if got := events(s, nostr.Filter{Tags: tags}); len(got) != 0 {
+			t.Fatalf("incorrect optional/required or intent parameter match: %v", got)
+		}
+	}
+	if got := events(s, nostr.Filter{Tags: nostr.TagMap{"R": {"unavailable", "relay"}}}); len(got) != 3 {
+		t.Fatal("standard multi-value #R must retain NIP-01 OR semantics")
 	}
 }
 func TestSearchPaginatesAndOrders(t *testing.T) {

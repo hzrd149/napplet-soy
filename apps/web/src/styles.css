@@ -452,6 +452,45 @@ pre:focus-visible {
   font-size: 11px;
   background: transparent;
 }
+.gallery-filters {
+  margin: -8px 0 24px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 12px;
+}
+.gallery-filters summary {
+  cursor: pointer;
+  color: var(--muted-foreground);
+}
+.gallery-filters summary span {
+  margin-left: 10px;
+  color: var(--foreground);
+}
+.gallery-filter-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+.gallery-filter-fields label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.gallery-filter-fields select {
+  width: 100%;
+  min-width: 0;
+  background: var(--background);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 8px;
+}
+.gallery-filters p {
+  color: var(--muted-foreground);
+  margin: 12px 0 8px;
+}
 .remix-command {
   display: flex;
   gap: 12px;

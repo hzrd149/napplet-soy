@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdtemp, mkdir, rm, symlink } from 'node:fs/promises';
+import { lstat, mkdtemp, mkdir, readlink, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { nip19 } from 'nostr-tools';
@@ -15,6 +15,7 @@ import { publishProject } from '../../packages/publish/src';
 import { checkpoint } from '../../packages/publish/src/git-source';
 import { Journal } from '../../packages/publish/src/journal';
 import { loadRemix, createRemix } from '../../packages/remix/src';
+import { sourceArchive } from '../../packages/remix/src/archive';
 import { sha256, validateRelease } from '../../packages/protocol/src';
 import { sourceGit } from '../../packages/grasp/src/client';
 
@@ -67,8 +68,6 @@ test('large sources and a 12 MiB game publish, resume data assets and retain his
     await sourceGit(project, ['add', '.']);
     await sourceGit(project, ['commit', '-m', 'Original guidance alias']);
     const historicalCommit = await sourceGit(project, ['rev-parse', 'HEAD']);
-    await rm(join(project, 'CLAUDE.md'));
-    await Bun.write(join(project, 'CLAUDE.md'), 'Build a game.\n');
     const imported: ManagedAsset[] = [];
     for (const original of originals) {
       const asset = await importAsset(project, {
@@ -116,6 +115,9 @@ test('large sources and a 12 MiB game publish, resume data assets and retain his
     const accounts = new Accounts('local', join(directory, 'accounts'), vault);
     const creator = await accounts.create();
     await checkpoint(project, 'Keep original data assets', creator.pubkey);
+    const releaseCommit = await sourceGit(project, ['rev-parse', 'HEAD']);
+    const sourceLink = await sourceGit(project, ['ls-tree', 'HEAD', 'CLAUDE.md']);
+    expect(sourceLink).toStartWith('120000 blob');
     const options = {
       directory: project,
       network: 'local' as const,
@@ -141,6 +143,7 @@ test('large sources and a 12 MiB game publish, resume data assets and retain his
     expect(interrupted).toBe(true);
     const journal = new Journal(project, 'local');
     const frozen = await journal.load((await journal.index()).active!);
+    expect(frozen.commit).toBe(releaseCommit);
     expect(frozen.plan.files.length).toBeGreaterThan(128);
     expect(frozen.plan.files.find((file) => file.path === 'index.html')?.size).toBe(
       12 * 1024 * 1024,
@@ -180,11 +183,25 @@ test('large sources and a 12 MiB game publish, resume data assets and retain his
       originals[0].bytes,
     );
     const complete = await journal.load((await journal.index()).latest!);
+    expect(complete.commit).toBe(releaseCommit);
+    expect(complete.archiveHash).toBe(frozen.archiveHash);
+    expect(await sourceGit(project, ['rev-parse', 'HEAD'])).toBe(releaseCommit);
+    expect(await sourceGit(project, ['ls-tree', 'HEAD', 'CLAUDE.md'])).toBe(sourceLink);
+    expect(await readlink(join(project, 'CLAUDE.md'))).toBe('AGENTS.md');
     expect(complete.receipts.assets).toEqual(
       Object.fromEntries(imported.map((asset) => [asset.hash, true])),
     );
     const release = await validateRelease(complete.current, complete.snapshot);
-    expect(release.current.tags).toContainEqual(['requires', 'resource']);
+    expect(release.current.tags).toContainEqual(['R', 'resource']);
+    const archiveResponse = await fetch(`${proxy.url.origin}/${complete.archiveHash}`);
+    expect(archiveResponse.status).toBe(200);
+    const archiveBytes = await archiveResponse.bytes();
+    expect(await sha256(archiveBytes)).toBe(complete.archiveHash);
+    // This reader rejects every link entry: successful extraction verifies that
+    // the uploaded source pack materializes aliases as regular source files.
+    const archiveFiles = sourceArchive(archiveBytes);
+    expect(archiveFiles.get('CLAUDE.md')).toEqual(new TextEncoder().encode('Build a game.\n'));
+    expect(archiveFiles.get('CLAUDE.md')).toEqual(archiveFiles.get('AGENTS.md'));
 
     const loaded = await loadRemix(
       nip19.neventEncode({
@@ -200,6 +217,10 @@ test('large sources and a 12 MiB game publish, resume data assets and retain his
     await rm(project, { recursive: true });
     const remix = await createRemix(directory, 'fresh-remix', loaded);
     expect(remix.source).toBe('git');
+    expect(await sourceGit(remix.directory, ['rev-parse', 'HEAD'])).toBe(releaseCommit);
+    expect(await sourceGit(remix.directory, ['ls-tree', 'HEAD', 'CLAUDE.md'])).toBe(sourceLink);
+    expect((await lstat(join(remix.directory, 'CLAUDE.md'))).isSymbolicLink()).toBe(true);
+    expect(await readlink(join(remix.directory, 'CLAUDE.md'))).toBe('AGENTS.md');
     expect(Bun.file(join(remix.directory, 'index.html')).size).toBe(12 * 1024 * 1024);
     expect(await sourceGit(remix.directory, ['rev-parse', `${historicalCommit}^{commit}`])).toBe(
       historicalCommit,
@@ -213,6 +234,15 @@ test('large sources and a 12 MiB game publish, resume data assets and retain his
     for (const [index, asset] of imported.entries()) {
       expect(await assetBytes(remix.directory, asset)).toEqual(originals[index].bytes);
     }
+    const archiveRemix = await createRemix(directory, 'archive-remix', {
+      ...loaded,
+      repository: undefined,
+    });
+    expect(archiveRemix.source).toBe('archive');
+    expect((await lstat(join(archiveRemix.directory, 'CLAUDE.md'))).isFile()).toBe(true);
+    expect(await Bun.file(join(archiveRemix.directory, 'CLAUDE.md')).text()).toBe(
+      'Build a game.\n',
+    );
   } finally {
     proxy?.stop(true);
     await services?.close();

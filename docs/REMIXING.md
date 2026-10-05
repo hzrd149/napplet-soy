@@ -55,7 +55,13 @@ license/credit but does not invent Git ancestry or automatic upstream PR support
 No downloaded setup/build script runs during remix. Run `setup` explicitly after
 reviewing the source. Missing licensing information remains `UNLICENSED`.
 
-Publication emits [NIP-5A ancestry](https://github.com/nostr-protocol/nips/blob/master/5A.md): a current remix's `a` is its immediate parent and `A` its original ancestor. A snapshot's `a` remains its own napplet address, with `A` inherited. The optional `remix-version` tag records the exact selected event; other clients can ignore it and still discover and run the remix normally.
+For an artifact-only remix, imported descriptions are limited to 1,000 characters
+and optional archetypes/intents are copied only when they fit local authoring
+bounds. The exact signed source event, selected event ID and downloaded artifact
+bytes are preserved; adjusting the editable project metadata never changes the
+verified original.
+
+New publications put optional immediate-parent `a` and root-origin `A` on the independent `5129` snapshot only, following [NIP-5D PR 7](NIP5D-MIGRATION.md). The named current event carries no `a`/`A`. These tags are ancestry claims and never grant the parent's runtime identity. The optional `remix-version` records the exact selected source event. Legacy current/snapshot ancestry keeps its previous interpretation. A snapshot without ancestry can still be inspected, played and remixed when retrievable source exists.
 
 Remix has shipped since CLI 0.3.0. Historical releases are recorded in
 [deployment notes](DEPLOYMENT.md#rich-comments-and-soyli-070-release--2026-09-15);
@@ -69,19 +75,9 @@ declares ancestry. It connects known ancestors down to **You are here**, linking
 each parent release and its creator’s Nostr profile. It loads separately from the
 player and never downloads or executes ancestor artifacts.
 
-NIP-5A at [a2494f4f81d46684e5814a9bf35e2b1df978f955](https://github.com/nostr-protocol/nips/blob/a2494f4f81d46684e5814a9bf35e2b1df978f955/5A.md)
-supplies the ancestry semantics, with NIP-5D’s selected napplet kinds retained.
-A current manifest’s single `a` names the immediate parent; `A` names the origin.
-For kind-5129 snapshots, `a` names the snapshotted napplet itself, **never a remix
-parent**. An `A` without an immediate parent produces an explicitly incomplete
-tree and a separate declared-origin link. There is no invented connection across
-missing generations. Standards-only publishers work without Space metadata.
+Genealogy reads format-specific signed ancestry. Legacy named events use their historical `a`/`A`; legacy snapshots use `a` as their own address, never a parent. New snapshots use `a`/`A` strictly as parent/root provenance and need neither. New named events have no standard ancestry tags; an optional exact `remix-version` claim can still lead to the selected source revision.
 
-When present, the optional `remix-version` pins the exact parent event. The event’s
-signature, manifest and identity must validate; a current child’s declared parent
-address must agree with that exact event. Without a revision pin, an address-linked
-parent is labeled as its **current release**, which can change after the remix.
-These are author-declared relationships, not proof that code was copied or rebuilt.
+Every ancestor's signature and manifest must validate. An exact revision pin must agree with any declared parent address. Without a revision pin, an address-linked parent is labeled as its **current release**, which can change. These relationships are author-declared, not proof of code derivation or permission to access another napplet's data.
 
 Lookup starts with the local index/cache and uses configured relays for missing
 ancestors. It follows at most twelve generations, detects repeated identities/IDs,
@@ -106,6 +102,12 @@ in that exact signed release. The tree lists the bounded source archive, offers 
 license file and author-recorded commit, and displays selected text with syntax
 highlighting. Downloads retain the original bytes. **Remix this** reuses the same
 pinned event in both the installed-CLI and install-and-remix commands.
+
+Safe source aliases such as `CLAUDE.md -> AGENTS.md` remain links in Git-based
+remixes. New source archives represent these aliases as regular copies of the
+exact committed target bytes, so archive recovery and this source browser can
+read them without following links. Git history itself is unchanged. Each copy
+counts toward the expanded-source budget.
 
 The signed `source-archive` URL must end in its SHA-256 digest (optionally `.tar`).
 The browser verifies downloaded bytes and uses the same Git-tar parser as the CLI:

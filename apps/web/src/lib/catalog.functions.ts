@@ -100,7 +100,11 @@ const getDiscoveredNappletSSR = createServerOnlyFn(
       if (napplet && (!previous || !['queued', 'searching'].includes(previous.state)))
         return result(null);
       // A known deletion or invalid replacement is not a discovery miss.
-      if (!napplet && indexStore()?.row(target.key)) return result(null);
+      const known =
+        target.type === 'snapshot'
+          ? indexStore()?.revision(target.id)
+          : indexStore()?.row(target.key);
+      if (!napplet && known) return result(null);
       let job = previous;
       if (!napplet)
         try {

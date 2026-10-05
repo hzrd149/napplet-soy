@@ -107,6 +107,9 @@ export async function lifecycleCommand(options: {
           operation: options.operation,
           manifest: last.current,
           saved: manifests,
+          snapshotPairs: jobs.flatMap((job) =>
+            job.current && job.snapshot ? [{ current: job.current, snapshot: job.snapshot }] : [],
+          ),
           metadata: jobs.flatMap((j) => (j.preview?.descriptor ? [j.preview.descriptor] : [])),
           extraBlobs,
           relays: [last.plan.targets.relay, ...last.plan.targets.mirrors],

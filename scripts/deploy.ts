@@ -86,6 +86,7 @@ export async function createDeploymentArchive(archive: string) {
     'docs/MOBILE.md',
     'docs/WASM.md',
     'docs/VISUAL-DESIGN.md',
+    'docs/NIP5D-CREATOR.md',
     'apps',
     'packages',
     'scripts',

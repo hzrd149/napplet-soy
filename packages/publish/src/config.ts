@@ -82,6 +82,36 @@ export const recordingSchema = z
   );
 export type Recording = z.infer<typeof recordingSchema>;
 const watchInputs = z.array(z.string().min(1).max(200)).min(1).max(32).optional();
+const domain = z.string().regex(/^[a-z][a-z0-9-]{0,39}$/);
+export const intentSchema = z
+  .object({
+    intent: z
+      .string()
+      .min(1)
+      .max(256)
+      .regex(
+        /^[a-z][a-z0-9+.-]*:[^\s?#]+$/i,
+        'Use a queryless intent identity such as napplet:feed/open.',
+      ),
+    parameters: z
+      .array(
+        z
+          .string()
+          .min(1)
+          .max(80)
+          .regex(/^[A-Za-z][A-Za-z0-9_.-]*$/),
+      )
+      // An i tag includes its name and intent before these parameters.
+      .max(14, 'An intent supports at most 14 parameter names.')
+      .default([]),
+  })
+  .strict();
+export const iconSchema = z
+  .object({
+    file: z.string().min(1).max(200),
+    mime: z.enum(['image/png', 'image/jpeg', 'image/webp']).optional(),
+  })
+  .strict();
 /** Local build recipes only: never projected into a manifest or executed by playback. */
 export const buildSchema = z.discriminatedUnion('kind', [
   z
@@ -126,10 +156,20 @@ export const projectSchema = z
     build: buildSchema.optional(),
     remix: remixSchema.optional(),
     license: z.string().min(1).max(100),
-    requires: z
-      .array(z.string().regex(/^[a-z][a-z0-9-]{0,39}$/))
+    requires: z.array(domain).max(32).default([]),
+    optionalDomains: z.array(domain).max(32).optional(),
+    archetypes: z
+      .array(
+        z
+          .string()
+          .min(1)
+          .max(80)
+          .regex(/^[^\s\u0000-\u001f\u007f]+$/),
+      )
       .max(32)
-      .default([]),
+      .optional(),
+    intents: z.array(intentSchema).max(32).optional(),
+    icon: iconSchema.optional(),
     topics: z.array(z.string().max(256)).max(32).default([]),
     relays: z.array(z.string().max(256)).max(8).default([]),
     servers: z.array(z.string().max(256)).max(8).default([]),

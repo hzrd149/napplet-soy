@@ -16,6 +16,48 @@ The web process requires `SPACE_COMMUNITY_DIR`. `bun run dev` and `bun run dev:p
 
 ## Social actions
 
+### Responsive social actions — 2026-10-05 source
+
+The comment composer and sign-in control render with the verified manifest, before
+conversation/profile reads finish. Replies, counts and names fill in as verified
+events arrive; an empty thread continues to say it is loading until its scan
+finishes. The `#comments` link focuses the composer without waiting for relay
+hydration. Cached and acknowledged events are reduced with the same scope,
+reference, author-deletion and moderation checks as incoming events.
+
+Likes use a small viewer-only reaction/deletion read rather than fetching the
+whole conversation, every author's profile and zap receipts. Interactive reads
+can use the first relay's completed result plus verified cached events. Remaining
+relay reads continue to update the store; this is a partial social view, not an
+all-relay mutation guarantee. Lifecycle and other reads that require a complete
+view still wait for every configured relay.
+
+Publication sends the same signed event to all selected relays concurrently and
+reports success at the first positive acknowledgement. Other attempts continue
+with their existing six-second deadline. Exhausted attempts retain redacted relay
+failure reasons and the exact signed event for retry. Acknowledged likes/comments
+update locally, and conversation refresh runs in the background; refreshing cannot
+hold the posting button busy or turn a successful post into a publication retry.
+Replacement refreshes and route teardown cancel obsolete read subscriptions.
+
+The zap form uses a known verified creator profile or the first verified profile
+received; empty relays do not end that lookup prematurely. Other relays continue
+refreshing the profile store. The current replaceable profile is chosen before
+moderation/content handling, so a blocked or malformed current profile cannot
+silently resurrect an older Lightning address. LNURL lookup and invoice validation
+remain direct to the creator's service, with no conversation/receipt-total scan
+on the form's critical path. Closing cancels profile and endpoint lookup. Existing
+amount, recipient, invoice and payment-proof checks remain in force.
+
+Verification: `packages/client/src/transport.test.ts`, `social.test.ts` and
+`tests/services/social-actions-latency.test.ts` exercise a fast relay alongside a
+stalled fallback. Local Chromium measurements observed the composer within 6 ms
+of the discussion heading, a confirmed comment within 22 ms of acknowledgement,
+an anonymous invoice request in 357 ms from opening the zap dialog, and a gallery
+like in 510 ms from clicking. These fixture measurements isolate application waits;
+real signer approval, relay connection and Lightning-service latency still vary.
+This follow-up is implemented and locally verified, not deployed.
+
 ### Sharing a napplet as a Nostr note — 2026-09-24 source
 
 The share menus on detail pages and root gallery/ranking cards offer **Post to
@@ -83,12 +125,13 @@ pending card, a compact retry button remains available until resolved or cancell
 Uncertain delivery retains the exact signed event and requires the same account for
 retry; other writes are locked while it is pending. Acknowledged publication clears
 the pending event before refreshing. A failed read instead turns Refresh into Retry
-refresh, so it cannot cause a duplicate publication. Social reads time out after 15
-seconds and writes after 20; signer approval remains user-driven. Named-link claims
+refresh, so it cannot cause a duplicate publication. Direct relay queries have a
+3.5-second deadline per relay and publication attempts a six-second deadline;
+signer approval remains user-driven. Named-link claims
 also keep progress/errors/success in their button; their retry uses fresh NIP-98 HTTP
 authorization, not a replayed auth event. The claim itself remains idempotent.
 
-Comments use [NIP-22](https://github.com/nostr-protocol/nips/blob/master/22.md) kind 1111 with address-qualified root and parent tags (including the current event reference when available). Replies retain the root and reference their parent comment. Rooted threads survive title changes, aliases and new versions. A snapshot can join an author's address thread only if its signed parent address has the same author; foreign snapshots keep an event-rooted thread. HTML-looking strings remain escaped text; recognized references receive the presentation described below.
+Comments use [NIP-22](https://github.com/nostr-protocol/nips/blob/master/22.md) kind 1111 with address-qualified root and parent tags for named/root napplets (including the current event reference when available). Replies retain the root and reference their parent comment. These address threads survive title changes, aliases and new versions. New standalone snapshots have their own event-rooted threads; even a same-author `a` or `A` ancestry claim cannot borrow a parent's conversation. Only legacy snapshots retain their validated same-author self-address grouping. HTML-looking strings remain escaped text; recognized references receive the presentation described below. See the [manifest migration](NIP5D-MIGRATION.md) for pinned named revisions and gallery pair presentation.
 
 ### Rich comment presentation — 2026-09-15
 
@@ -128,7 +171,7 @@ Verification: parser/cache/thread/moderation tests plus
 execution or eager media requests, fullscreen session preservation, main-player
 handoff, lazy images, manual video, cleanup, errors, deletion and mobile width.
 
-Likes use [NIP-25](https://github.com/nostr-protocol/nips/blob/master/25.md) kind 7, with `e`, `p`, `k` and `a` references. Only known verified target manifests contribute, and one actor counts once per creation. Unlike and comment deletion use kind 5, applied only to matching events from the same author. Deleting an older like cannot delete a later like. Deleted comments retain a placeholder for replies.
+Likes use [NIP-25](https://github.com/nostr-protocol/nips/blob/master/25.md) kind 7, with `e`, `p`, `k` and `a` references. Addressed interactions follow the stable kind/author/identifier across releases, even if relays have discarded the older target event. A known conflicting event/address pair is rejected; optional k tags may be absent. Event-only interactions require a verified target. Independent snapshots and comment reactions remain event-scoped. One actor counts once per creation. Unlike and comment deletion use kind 5, applied only to matching events from the same author. Deleting an older like cannot delete a later like. Deleted comments retain a placeholder for replies.
 
 The browser reads and publishes through Applesauce to its configured relays. Finite
 queries retrieve comments, reactions, referenced releases, profiles and deletion
@@ -218,7 +261,14 @@ as napplet zaps. Payment still requires an explicit wallet action.
 
 ## Gallery and Featured
 
-The homepage reads the standard relay/index collection and sorts newest first. Bundled
+The homepage reads the standard relay/index collection. **Newest** sorts by the
+first signed publication observed for each identity; **Recently updated** sorts by
+the latest manifest timestamp. The persistent index recovers original dates from
+retained old revisions and same-author legacy snapshots, and keeps them across
+updates/restarts. Independent snapshot ancestry never changes a parent's date.
+When no history survives, the current timestamp is the fallback; these are not
+claims of a globally complete publication history. Tag/search/capability/sort
+controls apply to the general list, below the independent social ranking rails. Bundled
 examples are no longer prepended as a special collection. The dev seed process still
 publishes them to the local services, where discovery treats them like any other napplet.
 Legacy direct example links remain available for compatibility.

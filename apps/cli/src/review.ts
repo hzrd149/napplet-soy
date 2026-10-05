@@ -190,10 +190,17 @@ export async function review(
       JSON.stringify({
         schema: 'space-local-project/v1',
         name: p.title,
+        title: (release.title || p.title).slice(0, 160),
+        description: release.description.slice(0, 1000),
         entry: 'index.html',
         previewId: crypto.randomUUID(),
         license: 'See source',
         requires: release.domains,
+        optionalDomains: release.optionalDomains.slice(0, 32),
+        // Authoring limits may be narrower than remote optional metadata. A review
+        // still plays the verified artifact when those advertisements cannot fit.
+        archetypes: projectSchema.shape.archetypes.safeParse(release.archetypes.slice(0, 16)).data,
+        intents: projectSchema.shape.intents.safeParse(release.intents.slice(0, 4)).data,
         relays: [],
         servers: release.servers,
       }),

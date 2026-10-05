@@ -25,6 +25,24 @@ key. An unpublished listing may be unavailable from relays, so retain this recor
 or the original soyLI project. Ordinary external publications are supported without
 a Soy publishing journal; only assets and history that can be discovered are listed.
 
+The review lists every selected signed release by event ID. For the new standalone
+format, a named/root release and snapshot enter the same removal inventory only
+when their signatures, author, timestamp, artifact and all shared signed metadata
+match exactly. The author must confirm that selection. Matching bytes or `a`/`A`
+ancestry alone never selects a snapshot, and managing an independent snapshot never
+selects its parent. This inventory association does not change playback, storage,
+backend or social identity.
+
+A fresh browser checks relay results and the site's retained signed index history,
+then verifies every returned manifest and pair itself. This includes observed older
+named revisions that a relay has already replaced, and their exact paired snapshots.
+The read-only history endpoint is bounded to 128 named/root revisions, 128 snapshots
+and 2 MiB. Coverage notes distinguish absent, truncated and unavailable history;
+truncation or a failed history request retains hosted files until a fresh complete
+inventory is available. Unobserved snapshots remain independent and are not selected
+merely because the same author published them. Saved receipts freeze the reviewed
+event IDs; retries never discover and delete additional releases.
+
 ## soyLI
 
 Run these in the original publishing project, with its publishing identity selected:
@@ -59,15 +77,15 @@ the website flow; a private key alone cannot enumerate undiscoverable historical
 
 ## What each operation means
 
-| Part | Unpublish | Delete hosted data |
-| --- | --- | --- |
-| Current listing and discovered snapshots | Send author-signed NIP-09 requests; check each selected relay | Same |
-| Linked app descriptors | Keep them for republishing | Request deletion of known descriptors that are not reused by another napplet |
-| Build, source archives, runtime assets, images and videos | Keep hosted files | Signed Blossom DELETE for each inventoried hash/server |
-| Git repository | Keep it public | NIP-09 request to its GRASP relay; verify announcement and public Git download removal |
-| Same-author reused files/repositories | Keep | Retain to avoid breaking another creation |
-| Local source, keys, other people's comments/zaps/forks | Keep | Keep |
-| Backend/CVM game state and scores | Provider retention applies | No backend purge is requested; manage this with its provider |
+| Part                                                      | Unpublish                                                     | Delete hosted data                                                                     |
+| --------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Current listing and discovered snapshots                  | Send author-signed NIP-09 requests; check each selected relay | Same                                                                                   |
+| Linked app descriptors                                    | Keep them for republishing                                    | Request deletion of known descriptors that are not reused by another napplet           |
+| Build, source archives, runtime assets, images and videos | Keep hosted files                                             | Signed Blossom DELETE for each inventoried hash/server                                 |
+| Git repository                                            | Keep it public                                                | NIP-09 request to its GRASP relay; verify announcement and public Git download removal |
+| Same-author reused files/repositories                     | Keep                                                          | Retain to avoid breaking another creation                                              |
+| Local source, keys, other people's comments/zaps/forks    | Keep                                                          | Keep                                                                                   |
+| Backend/CVM game state and scores                         | Provider retention applies                                    | No backend purge is requested; manage this with its provider                           |
 
 **Republish** verifies that the saved build is still available and signs a fresh
 current listing under the same key/identifier. Its naddr and readable route stay
@@ -110,7 +128,9 @@ while deleting; independent services do not provide a distributed transaction.
 
 Tests cover read-only previews, confirmation tokens, wrong authors, stale
 confirmations, shared-file protection, per-service failures, exact signed retries
-and fresh republishing. The real CLI test uses isolated Khatru, Blossom and the
+and fresh republishing. The production migration browser test also covers fresh
+shell confirmation of current and retained historical exact pairs while independent
+snapshots remain published. The real CLI test uses isolated Khatru, Blossom and the
 pinned native GRASP. A browser test covers mobile confirmation, progress, reload
 recovery and republishing through an extension signer. No real user publications
 are deleted by these tests.

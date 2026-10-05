@@ -6,8 +6,8 @@ import { network, protocolClient, manifestAllowed } from '@/lib/network';
 import { downloadBytes } from '../../../../packages/client/src/bytes';
 import { publicNapplet, type PublicNapplet } from '../../../../packages/backend/src/public-model';
 import {
-  readRepository,
-  readProposals,
+  observeRepository,
+  observeProposals,
   tag,
   validatePreview,
   proposalId,
@@ -15,6 +15,7 @@ import {
   type Repository,
 } from '../../../../packages/collaboration/src/protocol';
 import type { SignedEvent } from '../../../../packages/protocol/src';
+import { switchMap, Subscription } from 'rxjs';
 
 export function Proposals({ manifest, reference }: { manifest?: SignedEvent; reference?: string }) {
   const source = manifest && tag(manifest, 'source');
@@ -40,6 +41,8 @@ export function Proposals({ manifest, reference }: { manifest?: SignedEvent; ref
   useEffect(() => {
     if (!source?.startsWith('nostr://') && !reference) return;
     let active = true;
+    const controller = new AbortController();
+    const subscription = new Subscription();
     setLoading(true);
     setError('');
     void (async () => {
@@ -48,29 +51,48 @@ export function Proposals({ manifest, reference }: { manifest?: SignedEvent; ref
         id: string | undefined;
       if (reference) {
         id = proposalId(reference);
-        const root = (await client.query([{ ids: [id], kinds: [1618, 1617], limit: 1 }]))[0];
+        const root = await client.queryEvent(id, [1618, 1617], [], controller.signal);
         if (!root) throw new Error('Proposal unavailable on your relays.');
+        if (!manifestAllowed(root)) throw new Error('Proposal unavailable here.');
         repoRef = tag(root, 'a') ?? '';
       }
-      const repo = await readRepository(client, repoRef),
-        proposals = await readProposals(client, repo, id);
+      if (!active) return;
+      subscription.add(
+        observeRepository(client, repoRef)
+          .pipe(
+            switchMap((repo) => {
+              setRepository(repo);
+              return observeProposals(client, repo, id);
+            }),
+          )
+          .subscribe({
+            next: (proposals) => {
+              setRows(proposals);
+              if (proposals.length) setLoading(false);
+              if (id) {
+                setSelected((current) => current ?? id);
+                setRevision(
+                  (current) => current ?? proposals.find((p) => p.root.id === id)?.revision.id,
+                );
+              }
+            },
+            error: (error) => {
+              setError(error.message);
+              setLoading(false);
+            },
+            complete: () => setLoading(false),
+          }),
+      );
+    })().catch((e) => {
       if (active) {
-        setRepository(repo);
-        setRows(proposals);
-        if (id) {
-          setSelected((current) => current ?? id);
-          setRevision((current) => current ?? proposals.find((p) => p.root.id === id)?.revision.id);
-        }
+        setError(e.message);
+        setLoading(false);
       }
-    })()
-      .catch((e) => {
-        if (active) setError(e.message);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+    });
     return () => {
       active = false;
+      controller.abort();
+      subscription.unsubscribe();
     };
   }, [source, reference, generation]);
   const proposal = rows.find((p) => p.root.id === selected);
@@ -248,8 +270,8 @@ export function Proposals({ manifest, reference }: { manifest?: SignedEvent; ref
             </Button>
           </div>
           <p className="muted">
-            Review this proposal’s diff, discuss changes and merge locally with soyLI. Ordinary
-            Git and ngit work too.
+            Review this proposal’s diff, discuss changes and merge locally with soyLI. Ordinary Git
+            and ngit work too.
           </p>
         </>
       )}

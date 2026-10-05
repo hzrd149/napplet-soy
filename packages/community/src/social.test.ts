@@ -92,6 +92,42 @@ test('comments, replies, likes and deletions bind to verified authors and one st
   );
   expect(socialScope(foreign).key).toBe(foreign.id);
 });
+test('standalone snapshot ancestry never joins its parent social thread', async () => {
+  const current = await manifest(),
+    scope = socialScope(current);
+  const legacy = finalizeEvent(
+    {
+      ...current,
+      kind: 5129,
+      tags: [...current.tags.filter((t) => t[0] !== 'd'), ['a', scope.key]],
+    },
+    author,
+  );
+  expect(socialScope(legacy).key).toBe(scope.key);
+  for (const key of [author, bob]) {
+    const snapshot = finalizeEvent(
+      {
+        kind: 5129,
+        created_at: now,
+        content: 'An independent snapshot',
+        tags: [
+          ['x', 'b'.repeat(64)],
+          ['a', scope.key],
+          ['A', scope.key],
+        ],
+      },
+      key,
+    );
+    const own = socialScope(snapshot);
+    expect(own.key).toBe(snapshot.id);
+    expect(own.address).toBeNull();
+    const comment = finalizeEvent(commentTemplate(own, 'snapshot comment'), alice);
+    expect(socialView(scope, [comment], new Map([[snapshot.id, snapshot]])).comments).toHaveLength(
+      0,
+    );
+    expect(socialView(own, [comment], new Map([[snapshot.id, snapshot]])).comments).toHaveLength(1);
+  }
+});
 test('social service requires relay acknowledgements, retries exact events and persists per-thread metadata', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'space-social-'));
   const store = new CommunityStore(dir);
@@ -187,4 +223,34 @@ test('social service requires relay acknowledgements, retries exact events and p
     store.close();
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test('addressed reactions and root comments survive a pruned replaced event, with or without optional k', async () => {
+  const old = await manifest(),
+    next = await manifest('first', now - 50),
+    other = await manifest('other');
+  const scope = socialScope(next),
+    map = new Map([[next.id, next]]);
+  const like = finalizeEvent(likeTemplate(socialScope(old), old), alice);
+  const comment = finalizeEvent(commentTemplate(socialScope(old), 'before the update'), bob);
+  const withoutKind = finalizeEvent(
+    { ...like, tags: like.tags.filter((t) => t[0] !== 'k') },
+    alice,
+  );
+  expect(socialView(scope, [like, withoutKind, comment], map)).toMatchObject({ likeCount: 1 });
+  expect(socialView(scope, [comment], map).comments).toHaveLength(1);
+  const wrong = finalizeEvent(
+    { ...like, tags: like.tags.map((t) => (t[0] === 'e' ? ['e', other.id] : t)) },
+    alice,
+  );
+  expect(socialView(scope, [wrong], new Map([...map, [other.id, other]])).likeCount).toBe(0);
+  const idOnly = finalizeEvent({ ...like, tags: like.tags.filter((t) => t[0] !== 'a') }, alice);
+  expect(socialView(scope, [idOnly], map).likeCount).toBe(0);
+  const badKind = finalizeEvent(
+    { ...like, tags: like.tags.map((t) => (t[0] === 'k' ? ['k', '5129'] : t)) },
+    alice,
+  );
+  expect(socialView(scope, [badKind], map).likeCount).toBe(0);
+  const deleted = finalizeEvent(deletionTemplate([like]), alice);
+  expect(socialView(scope, [like, deleted], map).likeCount).toBe(0);
 });

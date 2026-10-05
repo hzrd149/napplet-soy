@@ -7,12 +7,14 @@ import {
   publicNapplet,
   type PublicCache,
 } from './public-model';
-import { decodeAddress, identityAddress } from '../../protocol/src';
+import { decodeAddress, eventSchema, identityAddress, type SignedEvent } from '../../protocol/src';
 import type { Lookup } from './catalog';
 import { missingDomains } from '../../runtime/src/capabilities';
 import { validatedPreview } from '../../protocol/src/preview';
 import { indexedEntries, indexedLookup, indexStore, indexHealth } from './indexed-catalog';
 import { manifestKey, newerManifest } from './index-store';
+import { legacySnapshotAddress, validateRelease } from '../../protocol/src/manifest';
+import { standalonePresentationKey } from '../../protocol/src/presentation-pairs';
 
 // Set by the dev launcher only. No request, hostname, or URL parameter can enable this mode.
 export function publicDirectory() {
@@ -69,12 +71,8 @@ export async function resolvePublicNapplet(input: Lookup) {
   if (input.type === 'snapshot')
     return indexed.known
       ? indexed.entry
-      : (entries.find(
-          (n) =>
-            n.manifest.kind === 5129 &&
-            n.revisionId === input.id &&
-            !indexStore()?.removed(n.manifest),
-        ) ?? null);
+      : (entries.find((n) => n.revisionId === input.id && !indexStore()?.removed(n.manifest)) ??
+          null);
   try {
     const address = identityAddress(decodeAddress(input.naddr));
     const cached = entries.find(
@@ -112,9 +110,44 @@ export async function communityEntries() {
     )
       winners.delete(key);
   }
+  const snapshotPresentations = new Map<string, SignedEvent[]>();
+  for (const entry of winners.values()) {
+    const key = standalonePresentationKey(entry.manifest);
+    if (entry.manifest.kind === 5129 && key)
+      snapshotPresentations.set(key, [...(snapshotPresentations.get(key) ?? []), entry.manifest]);
+  }
+  const paired = new Set<string>();
+  // Retained named revisions can coalesce old publication pairs as well. Only
+  // matching candidates need signature/schema verification; no artifact fetch.
+  const pairCandidates = [
+    ...[...winners.values()].map((entry) => entry.manifest),
+    ...(indexStore()?.allRows() ?? []).flatMap((row) => {
+      try {
+        const event = eventSchema.safeParse(JSON.parse(row.event));
+        return event.success ? [event.data] : [];
+      } catch {
+        return [];
+      }
+    }),
+  ];
+  for (const candidate of pairCandidates) {
+    if (candidate.kind === 5129 || manifestBlocked(candidate) || indexStore()?.removed(candidate))
+      continue;
+    const key = standalonePresentationKey(candidate);
+    for (const snapshot of key ? (snapshotPresentations.get(key) ?? []) : []) {
+      if (paired.has(snapshot.id)) continue;
+      try {
+        await validateRelease(candidate, snapshot);
+        paired.add(snapshot.id);
+      } catch {
+        /* A matching unverified projection never hides a signed snapshot. */
+      }
+    }
+  }
   return [...winners.values()].filter((entry) => {
     if (entry.manifest.kind !== 5129) return true;
-    const address = entry.manifest.tags.find((t) => t[0] === 'a')?.[1];
+    if (paired.has(entry.revisionId)) return false;
+    const address = legacySnapshotAddress(entry.manifest);
     // Keep snapshot URLs, but show one gallery card when its own author's current exists.
     return !address || address.split(':')[1] !== entry.pubkey || !winners.has(address);
   });

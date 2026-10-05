@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { verifiedEvent, sha256, type SignedEvent } from '../../protocol/src';
 import { validateManifest } from '../../protocol/src/manifest';
 import type { ProtocolClient } from '../../client/src/nostr';
+import { Observable, map, filter, distinctUntilChanged, Subscription } from 'rxjs';
 
 export const commitPattern = /^[a-f0-9]{40}$/;
 export const tag = (event: SignedEvent, name: string) => event.tags.find((t) => t[0] === name)?.[1];
@@ -61,6 +62,12 @@ export async function readRepository(
     ),
   )[0];
   if (!event) throw new Error('Repository announcement unavailable.');
+  return repositoryFromEvent(ref, event);
+}
+function repositoryFromEvent(
+  ref: ReturnType<typeof repositoryRef>,
+  event: SignedEvent,
+): Repository {
   return {
     ...ref,
     event,
@@ -74,6 +81,24 @@ export async function readRepository(
     ],
     euc: event.tags.find((t) => t[0] === 'r' && t[2] === 'euc')?.[1],
   };
+}
+/** A display projection; later announcements replace earlier ones as relays respond. */
+export function observeRepository(client: ProtocolClient, reference: string) {
+  const ref = repositoryRef(reference);
+  return client
+    .observeQuery(
+      [{ kinds: [30617], authors: [ref.pubkey], '#d': [ref.identifier], limit: 5 }],
+      ref.relays,
+    )
+    .pipe(
+      map((events) => latest(events)[0]),
+      filter((event): event is SignedEvent => !!event),
+      distinctUntilChanged((a, b) => a.id === b.id),
+      map((event) => {
+        if (!client.allowed(event)) throw new Error('Repository unavailable here.');
+        return repositoryFromEvent(ref, event);
+      }),
+    );
 }
 export type Proposal = {
   root: SignedEvent;
@@ -171,6 +196,85 @@ export async function readProposals(client: ProtocolClient, repo: Repository, se
     repo.relays,
   );
   return proposalsFromEvents(repo, [...roots, ...related]);
+}
+/** Progressive review UI. The CLI's merge/review reads keep their full-query contract. */
+export function observeProposals(client: ProtocolClient, repo: Repository, selected?: string) {
+  const filters = [
+    { kinds: [1617, 1618], '#a': [repo.address], limit: 100 },
+    ...(selected ? [{ kinds: [1617, 1618], ids: [proposalId(selected)], limit: 1 }] : []),
+  ];
+  return new Observable<Proposal[]>((observer) => {
+    const subscriptions = new Subscription();
+    const requested = new Set<string>(),
+      related = new Map<string, SignedEvent>();
+    let roots: SignedEvent[] = [],
+      timer: ReturnType<typeof setTimeout> | undefined,
+      rootsComplete = false,
+      loadingRelated = false,
+      pendingRelated = 0;
+    const complete = () => {
+      if (rootsComplete && !timer && !loadingRelated && pendingRelated === 0) observer.complete();
+    };
+    const emit = () =>
+      observer.next(
+        proposalsFromEvents(repo, [...roots, ...related.values()].filter(client.allowed)),
+      );
+    const loadRelated = () => {
+      timer = undefined;
+      loadingRelated = true;
+      const ids = roots.filter((event) => !requested.has(event.id)).map((event) => event.id);
+      for (let i = 0; i < ids.length && !observer.closed; i += 32) {
+        const group = ids.slice(i, i + 32);
+        group.forEach((id) => requested.add(id));
+        pendingRelated++;
+        subscriptions.add(
+          client
+            .observeQuery(
+              [
+                { kinds: [1619, 1111], '#E': group, limit: 500 },
+                { kinds: [1630, 1631, 1632, 1633], '#e': group, limit: 500 },
+              ],
+              repo.relays,
+            )
+            .subscribe({
+              next: (events) => {
+                for (const event of events)
+                  if (related.size < 2000 || related.has(event.id)) related.set(event.id, event);
+                emit();
+              },
+              error: (error) => observer.error(error),
+              complete: () => {
+                pendingRelated--;
+                complete();
+              },
+            }),
+        );
+      }
+      loadingRelated = false;
+      complete();
+    };
+    subscriptions.add(
+      client.observeQuery(filters, repo.relays).subscribe({
+        next: (events) => {
+          roots = latest(events)
+            .filter((e) => values(e, 'a').includes(repo.address))
+            .slice(0, 100);
+          emit();
+          if (!timer) timer = setTimeout(loadRelated, 40);
+        },
+        error: (error) => observer.error(error),
+        complete: () => {
+          rootsComplete = true;
+          clearTimeout(timer);
+          loadRelated();
+        },
+      }),
+    );
+    return () => {
+      clearTimeout(timer);
+      subscriptions.unsubscribe();
+    };
+  });
 }
 export const previewSchema = z
   .object({

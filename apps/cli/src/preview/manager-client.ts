@@ -71,6 +71,49 @@ export function setupManager(signal: AbortSignal) {
       description = field(form, 'Description', data.project.description, true),
       topics = field(form, 'Tags · comma separated', data.project.topics.join(', ')),
       license = field(form, 'Project license', data.project.license);
+    const metadata = el('details');
+    metadata.append(el('summary', 'Capabilities and discovery'));
+    metadata.append(
+      el(
+        'p',
+        'Describe what your napplet supports. Optional integrations and discovery labels never grant permissions.',
+        'muted',
+      ),
+    );
+    const requires = field(
+        metadata,
+        'Required domains · comma separated',
+        data.project.requires.join(', '),
+      ),
+      optionalDomains = field(
+        metadata,
+        'Optional domains · comma separated',
+        data.project.optionalDomains.join(', '),
+      ),
+      archetypes = field(
+        metadata,
+        'Archetypes · comma separated',
+        data.project.archetypes.join(', '),
+      ),
+      intents = field(
+        metadata,
+        'Accepted intents · one per line, followed by parameter names',
+        data.project.intents.map((i) => [i.intent, ...i.parameters].join(' ')).join('\n'),
+        true,
+      ),
+      icon = field(
+        metadata,
+        'Icon · project file (PNG, JPEG or WebP)',
+        data.project.icon?.file ?? '',
+      );
+    intents.placeholder = 'napplet:track/edit track mode';
+    icon.placeholder = 'assets/icon.png';
+    form.append(metadata);
+    const commaList = (value: string) =>
+      value
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean);
     const saveProject = el('button', 'Save project');
     saveProject.type = 'submit';
     form.append(saveProject);
@@ -88,6 +131,18 @@ export function setupManager(signal: AbortSignal) {
               .map((x) => x.trim().replace(/^#/, ''))
               .filter(Boolean),
             license: license.value,
+            requires: commaList(requires.value),
+            optionalDomains: commaList(optionalDomains.value),
+            archetypes: commaList(archetypes.value),
+            intents: intents.value
+              .split('\n')
+              .map((line) => line.trim())
+              .filter(Boolean)
+              .map((line) => {
+                const [intent, ...parameters] = line.split(/\s+/);
+                return { intent, parameters };
+              }),
+            icon: icon.value.trim() ? { file: icon.value.trim() } : null,
           },
         },
         saveProject,

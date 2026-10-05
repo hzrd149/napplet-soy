@@ -46,10 +46,10 @@ async function verify() {
     await browserExpect(staticPage.locator('h1')).toContainText('Open possibilities');
     await browserExpect(staticPage.locator('meta[property="og:title"]')).toHaveAttribute(
       'content',
-      'Small code. Open possibilities.',
+      'About — napplet.soy',
     );
     await browserExpect(
-      staticPage.getByRole('link', { name: 'About napplet.soy', exact: true }),
+      staticPage.getByRole('contentinfo').getByRole('link', { name: 'About', exact: true }),
     ).toBeVisible();
     expect(await staticPage.locator('.about-resources > a').count()).toBe(8);
     expect(await staticPage.locator('.about-repositories').count()).toBe(0);

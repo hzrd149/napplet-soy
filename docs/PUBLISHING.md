@@ -23,7 +23,8 @@ Source is the actual committed working repository. Save a checkpoint with
 `soyli checkpoint "Describe the change"` or ordinary Git before sharing. The CLI
 requires a clean source tree and builds projects with `entry: dist/index.html`
 before its sandbox check. Build output and screenshots are separate release inputs;
-Git commits and authorship are preserved, and the source archive is that exact tree.
+Git commits and authorship are preserved. The source archive uses that exact tree,
+with safe file aliases represented by regular copies of their committed targets.
 
 Code and the ancestry reachable from the pushed main/release refs are public and
 open source by default. Other local branches are not pushed automatically. History
@@ -81,13 +82,15 @@ updated artifact limit before they admit and play HTML above the former 10 MiB
 ceiling. Releasing or updating the CLI alone does not update those services.
 
 Managed Git history is bounded to 10,000 reachable objects, 10,000 historical
-file versions/paths and 40 MiB of blobs. The current tree and archive require
-regular files with supported relative paths. Safe historical file aliases may
-remain after their removal or replacement at HEAD: every alias must resolve to
-a public regular file in that same immutable tree. Absolute, escaping, dangling,
-cyclic, directory and private links remain blocked. A safe alias needs no history
-rewrite. Submodules, Git attributes/modules, private state/dependency folders and
-likely credentials are refused. Git hooks are disabled.
+file versions/paths and 40 MiB of blobs. Current and historical Git trees may
+contain safe relative file aliases: every alias must resolve to a public regular
+file in that same immutable tree. Working aliases must remain within the selected
+public source, and resolved bytes pass credential checks. Absolute, escaping,
+dangling, cyclic, directory and private links remain blocked. Configuration,
+playable artifacts, managed assets, presentation files and backend build inputs
+still require regular files. A safe alias needs no replacement or history rewrite.
+Submodules, Git attributes/modules, private state/dependency folders and likely
+credentials are refused. Git hooks are disabled.
 
 The CLI builds source only on explicit publish/propose/build commands. Library
 callers supply their built artifact; checks and merely opening a review do not run
@@ -95,8 +98,13 @@ project scripts. Standard build metadata and required NAP domains are checked.
 
 The browser check runs the frozen HTML under our current shared host, CSP, opaque iframe sandbox and shim. It checks startup, the shell handshake, script errors and CSP violations, while blocking external network requests. It does not use an inherited preview server or modified runtime bundle. This is a startup smoke check, not comprehensive gameplay, performance, NAP, or external-service conformance testing. The compiler runs in a fresh Bun process to avoid the pinned runtime's known build/read issue after networking. The check report records the runtime profile and browser version.
 
-The archive is Git's tar of the exact frozen commit and contains its regular files.
-It remains a portable, hash-verifiable source snapshot for recovery, offline
+The archive comes from Git's tar of the exact frozen commit. Safe aliases are
+materialized as regular files using the exact committed target bytes, including
+binary content and trailing newlines; the Git repository itself keeps its links.
+Each materialized copy counts toward the 1,024-file and 40 MiB expanded-source
+limits. The untrusted archive reader still rejects links. Archives without aliases
+keep their original bytes, preserving existing archive hashes and resume behavior.
+The result remains a portable, hash-verifiable source snapshot for recovery, offline
 inspection and independent mirroring, alongside the Git repository and history.
 The playable artifact is the entry selected in `napplet.json`: `index.html`
 for legacy projects or `dist/index.html` for the upstream boilerplate. Built projects
@@ -137,7 +145,30 @@ Source state retains at most 128 release refs in this initial adapter. Reaching 
 
 ## Protocol output
 
-Publication uses the authoritative [pinned NIP-5D proposal](https://github.com/dskvr/nips/blob/24711d9c47bbdd07908bf1d52bf677d9cbc530f0/5D.md), the [NIP-5A manifest tag schema](https://github.com/nostr-protocol/nips/blob/master/5A.md), and [NIP-34 Git URLs/state](https://github.com/nostr-protocol/nips/blob/master/34.md). Named current events are kind 35129, snapshots are kind 5129 without a `d` tag, and both carry the same single `/index.html` mapping, aggregate, server hints, title/description, required domains and optional topic hashtags. Snapshot `a` references its own napplet address. `source` is an ordinary `nostr://` repository URL.
+Fresh publications use the selected [standalone NIP-5D draft at 4d0fb2e](https://github.com/dskvr/nips/blob/4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51/5D.md) and [NIP-34 Git URLs/state](https://github.com/nostr-protocol/nips/blob/master/34.md).
+Named current events remain kind 35129 with `d`; snapshots remain kind 5129 without
+`d`. Both carry one two-element `x` tag with the HTML SHA-256, nonempty plain-text
+`content`, server hints, optional title/topics and the same advertised capabilities.
+There are no `path`, aggregate-marker, `description` or `requires` tags in new events.
+Snapshot `a`/`A` is optional immediate/root ancestry, never its own application
+identity. Named current events do not carry these lineage tags. `source` remains
+an ordinary `nostr://` repository URL.
+
+Creators retain the convenient local `requires` field and existing Vite build
+declarations; the publisher writes them as `R`. Optional `optionalDomains`,
+`archetypes`, `intents: [{intent, parameters}]` and `icon: {file, mime?}` configure
+`O`, `z`, `i` and hash-addressed icon tags. Unknown optional domains do not block
+publishing or playback. An icon is an optional local PNG/JPEG/WebP up to 5 MiB,
+included in source and uploaded with a journaled receipt. These declarations
+do not grant runtime capabilities. The [creator manifest guide](NIP5D-CREATOR.md)
+includes the schema, editor/CLI workflow and migration instructions.
+
+Already signed legacy events remain readable. A saved publication job with the
+previous plan shape finishes in that original format, preserving its exact
+signatures, frozen source and descriptor. A fresh publication after upgrading
+uses standalone manifests even when the HTML has not changed. No history rewrite
+or republishing of other authors' events is needed. Deploy the compatible shell
+and indexer before distributing a CLI that publishes the new shape.
 
 Two optional provenance tags, `source-commit` and `source-archive`, carry the exact Git commit and content-addressed source tar URL. These are Space publishing conventions, not NIP-5D requirements. Clients may ignore them; ordinary `source`, manifest and Blossom discovery still work. There is no mandatory descriptor, branded hashtag or current-to-snapshot pointer. Automatic screenshots and optional video descriptor authoring are supported; metadata from other clients remains optional.
 
@@ -197,7 +228,7 @@ entry, license, or other metadata. Precedence is CLI target flags, selected
 are runtime read/resource hints; they are never upload destinations.
 
 `relay` receives signed manifests and preview descriptors. `blossom` receives
-HTML, source archives and PNG previews. `grasp` must be a compatible NIP-34/GRASP
+HTML, source archives, PNG previews and optional raster icons. `grasp` must be a compatible NIP-34/GRASP
 Git service. `site` determines share links and indexing checks. `mirrors` are
 best-effort extra copies after primary acknowledgement, not substitute primaries;
 set `mirrors: []` to disable them. A failed primary stops publication and leaves
@@ -211,8 +242,9 @@ their original destinations. Keep earlier stores available for existing snapshot
 
 See [preview capture and metadata](PREVIEWS.md#creator-capture-and-publication-2026-09-14)
 for automatic screenshots and choosing an inspected image. `soyli skills
-update` refreshes the bundled integration note in an existing project while
-preserving creator edits and upstream skill bodies.
+update` refreshes managed guides and adapted skill bodies in an existing project
+while reporting and preserving creator edits. Vendored upstream snapshots and
+pins remain unchanged; generated manifest guidance reflects the selected draft.
 
 ## Author publication lifecycle — 0.17.0
 

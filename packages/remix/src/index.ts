@@ -210,6 +210,7 @@ export async function createRemix(
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(name))
     throw new AccountError('REMIX_FOLDER', 'Choose a new lowercase folder name.');
   const lineage = await remixLineage(input.manifest);
+  const release = await validateManifest(input.manifest);
   const files = input.files ?? new Map<string, Uint8Array>();
   const decode = (path: string) =>
     new TextDecoder('utf-8', { fatal: true }).decode(files.get(path));
@@ -285,11 +286,23 @@ export async function createRemix(
       entry,
       previewId,
       identifier: `n-${previewId.replaceAll('-', '').slice(0, 11)}`,
-      description: previous?.description ?? '',
+      description: previous?.description || release.description.slice(0, 1000),
       license: previous?.license ?? 'UNLICENSED',
-      requires:
-        previous?.requires ??
-        input.manifest.tags.filter((t) => t[0] === 'requires').map((t) => t[1]),
+      requires: [...new Set([...(previous?.requires ?? []), ...release.domains])],
+      optionalDomains: previous?.optionalDomains ?? release.optionalDomains.slice(0, 32),
+      // Remote advertisements can exceed this authoring tool's narrower limits.
+      // Keep supported declarations verbatim; never turn truncation into a new
+      // routing identity or let optional metadata create an unusable project.
+      archetypes:
+        previous?.archetypes ??
+        release.archetypes
+          .filter((value) => projectSchema.shape.archetypes.safeParse([value]).success)
+          .slice(0, 32),
+      intents:
+        previous?.intents ??
+        release.intents
+          .filter((value) => projectSchema.shape.intents.safeParse([value]).success)
+          .slice(0, 32),
       topics: previous?.topics ?? manifestTopics(input.manifest),
       relays: previous?.relays ?? [],
       servers:
@@ -339,7 +352,7 @@ export async function createRemix(
           2,
         ) + '\n',
       );
-    const notice = `\n\nRemixed from Nostr event ${input.manifest.id}.\nOriginal napplet: ${lineage.parent}\nOriginal creator: ${input.manifest.pubkey}\nSource: ${files.size ? 'hash-verified author-published source archive' : 'verified self-contained HTML'}${lineage.sourceCommit ? `\nAuthor-recorded source commit: ${lineage.sourceCommit}` : ''}\n`;
+    const notice = `\n\nRemixed from Nostr event ${input.manifest.id}.\nOriginal napplet: ${lineage.parent ?? input.manifest.id}\nOriginal creator: ${input.manifest.pubkey}\nSource: ${files.size ? 'hash-verified author-published source archive' : 'verified self-contained HTML'}${lineage.sourceCommit ? `\nAuthor-recorded source commit: ${lineage.sourceCommit}` : ''}\n`;
     await writeFile(
       join(target, 'README.md'),
       (files.has('README.md') ? decode('README.md') : `# ${name}`) + notice,

@@ -1,4 +1,5 @@
 import type { SignedEvent } from '../../../../packages/protocol/src';
+import { legacySnapshotAddress } from '../../../../packages/protocol/src/manifest';
 import { ProtocolClient } from '../../../../packages/client/src/nostr';
 import { readRelayUrl } from '../../../../packages/nostr/src/relay-policy';
 import { resourceUrl } from '../../../../packages/client/src/bytes';
@@ -53,18 +54,14 @@ export function blocked(type: string, target: string) {
 }
 export function manifestAllowed(e: SignedEvent) {
   const address = `${e.kind}:${e.pubkey}:${e.kind === 15129 ? '' : (e.tags.find((t) => t[0] === 'd')?.[1] ?? '')}`;
+  const snapshotAddress = legacySnapshotAddress(e);
   return (
     !blocked('pubkey', e.pubkey) &&
     !blocked('event', e.id) &&
     !blocked('address', address) &&
+    (!snapshotAddress || !blocked('address', snapshotAddress)) &&
     !e.tags.some(
-      (t) =>
-        (t[0] === 'path' && blocked('hash', t[2])) ||
-        (t[0] === 'x' && blocked('hash', t[1])) ||
-        (e.kind === 5129 &&
-          t[0] === 'a' &&
-          t[1].split(':')[1] === e.pubkey &&
-          blocked('address', t[1])),
+      (t) => (t[0] === 'path' && blocked('hash', t[2])) || (t[0] === 'x' && blocked('hash', t[1])),
     )
   );
 }

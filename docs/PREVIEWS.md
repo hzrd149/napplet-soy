@@ -1,5 +1,11 @@
 # Linked napplet previews
 
+## Standalone manifest icons — 2026-10-04 source
+
+A new-format manifest can advertise `icon` as `["icon", "<sha256>", "image/png"]` (also JPEG/WebP). Icons are optional and do not alter artifact identity. The host downloads only by hash from declared Blossom origins, checks SHA-256, verifies the actual supported file format and decodes it before rendering verified bytes. Browser rendering uses a Blob URL; the index serves its verified normalized PNG. A local 5 MiB / 16 megapixel budget bounds icons. Malformed, missing, unsupported or corrupt icons fall back without blocking playback. Existing screenshots take precedence as covers; a valid icon is a fallback before generated artwork.
+
+The pinned PR 7 has no screenshot-tag schema despite the announcement's mention. Existing linked app descriptors continue to carry screenshots/video as optional extensions, not core NIP-5D requirements. No screenshot/video descriptor is necessary to list or run a standard manifest.
+
 Release `20260915084016730-23084` (2026-09-15) includes the short-video presentation
 and serves soyLI 0.7.0 with recording support. All four CLI downloads were uploaded
 before installer activation. See the [release evidence](DEPLOYMENT.md#rich-comments-and-soyli-070-release--2026-09-15).
@@ -30,7 +36,7 @@ The manager does not record the existing Play tab or export GIFs.
 
 ## Supported metadata
 
-The manifest link uses [NIP-5A's optional app descriptor reference](https://github.com/nostr-protocol/nips/blob/master/5A.md#upstream-app-descriptors), adopted with the manifest schema by the NIP-5D draft:
+The retained optional presentation extension uses [NIP-5A's app descriptor reference](https://github.com/nostr-protocol/nips/blob/master/5A.md#upstream-app-descriptors). New NIP-5D does not require this extension:
 
 ```json
 ["app", "31990:<descriptor-author-hex>:<identifier>", "wss://relay.example"]

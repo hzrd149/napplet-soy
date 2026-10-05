@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { ProtocolClient } from '../../client/src/nostr';
 import { Accounts, captureAccount } from '../../identity/src/accounts';
 import type { Network } from '../../identity/src/signer';
-import { aggregateHash, sha256, verifiedEvent, type SignedEvent } from '../../protocol/src';
+import { sha256, verifiedEvent, type SignedEvent } from '../../protocol/src';
 import { defaultTargets, projectSchema, resolveTargets } from '../../publish/src/config';
 import { readBinding, effectiveProject } from '../../publish/src/binding';
 import { committedSource } from '../../publish/src/git-source';
@@ -176,25 +176,28 @@ export async function propose(
           ))
             await put(inspected.contents.get(asset.path)!, asset.mime);
           await put(bytes, 'text/html');
+          if (inspected.plan.icon)
+            await put(inspected.contents.get(inspected.plan.icon.file)!, inspected.plan.icon.mime);
           const image = checked.preview ? await put(checked.preview, 'image/png') : undefined;
           const now = Math.max(Math.floor(Date.now() / 1000), (saved?.event.created_at ?? 0) + 1);
           const manifest = await signer!.signEvent({
             kind: 5129,
             created_at: now,
-            content: '',
+            content: inspected.plan.description,
             tags: [
-              ['a', `35129:${account.pubkey}:proposal-${key}`],
               ['title', project.title ?? project.name],
-              ['description', project.description],
-              ['path', '/index.html', inspected.plan.artifactHash],
-              [
-                'x',
-                await aggregateHash([{ path: '/index.html', hash: inspected.plan.artifactHash }]),
-                'aggregate',
-              ],
+              ['x', inspected.plan.artifactHash],
               ['server', targets.blossom],
               ['source-commit', commit],
-              ...inspected.plan.requires.map((r) => ['requires', r]),
+              ...inspected.plan.requires.map((r) => ['R', r]),
+              ...(inspected.plan.optionalDomains ?? []).map((r) => ['O', r]),
+              ...(inspected.plan.archetypes ?? []).map((a) => ['z', a]),
+              ...(inspected.plan.intents ?? []).map((i) => ['i', i.intent, ...i.parameters]),
+              ...(inspected.plan.icon
+                ? [['icon', inspected.plan.icon.hash, inspected.plan.icon.mime]]
+                : []),
+              ...(project.remix?.parent ? [['a', project.remix.parent]] : []),
+              ...(project.remix?.origin ? [['A', project.remix.origin]] : []),
               ...(image ? [['image', image]] : []),
             ],
           });

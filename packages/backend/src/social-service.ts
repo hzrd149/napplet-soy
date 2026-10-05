@@ -132,7 +132,9 @@ export class SocialService {
     for (const e of raw.filter((e) => [35129, 15129, 5129].includes(e.kind)))
       try {
         await validateManifest(e);
-        if (!manifestBlocked(e) && socialScope(e).key === context.scope.key) manifests.set(e.id, e);
+        // Retain other verified targets too, so a contradictory e/a pair is
+        // rejected instead of appearing to reference an unavailable old revision.
+        if (!manifestBlocked(e)) manifests.set(e.id, e);
       } catch {}
     const events = raw.filter((e) => [1111, 7, 5, 9735].includes(e.kind));
     const profiles: Record<string, { name: string; about?: string }> = {};

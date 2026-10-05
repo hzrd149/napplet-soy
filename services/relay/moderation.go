@@ -67,6 +67,37 @@ func (p *moderationPolicy) check() error {
 	defer p.Unlock()
 	return p.load()
 }
+
+// Only legacy path/aggregate snapshots use a as an own-address association.
+// A raw x always selects standalone semantics, including on malformed hybrids.
+func legacySnapshotAddress(e nostr.Event) string {
+	if e.Kind != 5129 {
+		return ""
+	}
+	legacy, addresses, address := false, 0, ""
+	for _, tag := range e.Tags {
+		if len(tag) == 0 {
+			continue
+		}
+		if tag[0] == "x" && len(tag) == 2 {
+			return ""
+		}
+		if tag[0] == "path" || (tag[0] == "x" && len(tag) >= 3 && tag[2] == "aggregate") {
+			legacy = true
+		}
+		if tag[0] == "a" {
+			addresses++
+			if len(tag) >= 2 {
+				address = tag[1]
+			}
+		}
+	}
+	if legacy && addresses == 1 && moderationAddress.MatchString(address) && strings.Split(address, ":")[1] == e.PubKey.Hex() {
+		return address
+	}
+	return ""
+}
+
 func (p *moderationPolicy) blocked(e nostr.Event) bool {
 	p.Lock()
 	defer p.Unlock()
@@ -87,11 +118,11 @@ func (p *moderationPolicy) blocked(e nostr.Event) bool {
 	if e.Kind == 35129 && p.keys["address:"+prefix+e.Tags.GetD()] {
 		return true
 	}
+	if address := legacySnapshotAddress(e); address != "" && p.keys["address:"+address] {
+		return true
+	}
 	for _, tag := range e.Tags {
 		if len(tag) >= 2 {
-			if e.Kind == 5129 && tag[0] == "a" && (strings.HasPrefix(tag[1], prefix) || tag[1] == "15129:"+e.PubKey.Hex()+":") && p.keys["address:"+tag[1]] {
-				return true
-			}
 			if tag[0] == "x" && p.keys["hash:"+tag[1]] {
 				return true
 			}

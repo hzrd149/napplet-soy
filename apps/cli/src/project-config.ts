@@ -69,6 +69,16 @@ export async function projectConfiguration(
     network,
     targets,
     runtime: { relays: project.relays, servers: project.servers },
+    manifest: {
+      format: 'standalone',
+      description:
+        project.description.trim() || project.title?.trim() || project.name.trim() || 'A napplet.',
+      requires: project.requires,
+      optionalDomains: project.optionalDomains ?? [],
+      archetypes: project.archetypes ?? [],
+      intents: project.intents ?? [],
+      icon: project.icon ?? null,
+    },
     preview: {
       ...(project.preview?.image ? { image: project.preview.image } : { capture: 'automatic' }),
       delayMs: project.preview?.delayMs ?? 1500,

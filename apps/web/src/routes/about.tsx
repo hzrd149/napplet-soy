@@ -211,7 +211,7 @@ function About() {
           , <a href="https://tanstack.com/start/latest">TanStack Start and Router</a>,{' '}
           <a href="https://ui.shadcn.com/">shadcn/ui</a> and{' '}
           <a href="https://applesauce.build/">Applesauce</a>. It follows the{' '}
-          <a href="https://github.com/dskvr/nips/blob/24711d9c47bbdd07908bf1d52bf677d9cbc530f0/5D.md">
+          <a href="https://github.com/dskvr/nips/blob/4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51/5D.md">
             NIP-5D proposal
           </a>{' '}
           and supported NAP capability contracts.

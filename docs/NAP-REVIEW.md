@@ -1,5 +1,21 @@
 # NAP concepts and expansion review
 
+## NIP-5D standalone manifest migration — 2026-10-04
+
+Selected authority: [dskvr/nips PR 7](https://github.com/dskvr/nips/pull/7), head `4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51` (open when reviewed). New writer and explicit dual reader use the same unchanged kinds. New `x` is raw HTML SHA-256; description is plain-text content; `R`/`O`, `icon`, `z` and `i` are supported. Snapshot ancestry is optional provenance, never own-app identity. Legacy `24711d9` readers remain for existing publications.
+
+The announcement mentions screenshot tags and possible intent hints, but neither has a wire contract in this pinned PR. Existing optional screenshot/video descriptors remain; no screenshot tag, intent grant or dispatch message is invented. NIP-91 intersections are an opt-in query optimization with standard tag-filter fallback. All required domains are still checked locally.
+
+Shim 0.30.0, nap/core 0.32.0, starter SDK 0.24.4, Vite plugin 0.11.2 and the upstream boilerplate/skill snapshots remain pinned. Soy's publisher and guidance adapters implement the new manifest; the old plugin's emitted event is not used for publishing. See [migration/rollout](NIP5D-MIGRATION.md) and [creator contract](NIP5D-CREATOR.md). Local implementation is distinct from release/deployment; dated records below describe their original baseline.
+
+2026-10-05 source-alias correction: safe relative aliases to public files are now
+accepted in current as well as historical Git trees. Git retains the links; the
+source archive uses regular copies of exact committed target bytes. Configuration,
+playable artifacts, managed assets, presentation files and backend build inputs
+remain regular-only. The strict untrusted archive parser and size/credential checks
+are retained. This supersedes the current-tree restriction in the dated note below;
+it changes no protocol pin, wire schema, runtime permission or playback requirement.
+
 2026-10-03 source admission update: the shared publisher/remix/source-browser
 budget is 1,024 files, with the existing 40 MiB source and 50 MiB archive ceilings.
 The current source tree and archive still require regular files; safe internal
@@ -33,7 +49,6 @@ subscription command, domain or manifest requirement. Changes belong to the fram
 lifetime, not the signing account. Creators choose whether to use them. NIP-5D,
 package pins and sandbox permissions remain unchanged. [Appearance](APPEARANCE.md)
 records browser coverage and limits; independent host conformance remains unverified.
-
 
 2026-09-23 application-data update: reviewed actual relay/outbox publish request and
 result shapes in the installed shim 0.30.0 source maps (its @napplet/core and
@@ -304,7 +319,6 @@ playback with separate state and guest identity. Optional `soy-preview` is a Soy
 attachment convention, explicitly documented in [COLLABORATION.md](COLLABORATION.md),
 not claimed as a standardized NAP or prerequisite for external proposals.
 
-
 ## Managed resource authoring review — 2026-09-20
 
 2026-10-03 authoring correction: soyLI's inventory now admits the same verified
@@ -358,12 +372,12 @@ other providers and real-network multiplayer remain separately qualified work.
 
 Selected proposal revisions for soyLI 0.15.0/shared `space-playback-4`:
 
-| Proposal | Exact selected head |
-| --- | --- |
-| [FS #88](https://github.com/napplet/naps/pull/88) | `b640cf337c0481f0f9a0216c00843f797a5c6df6` |
+| Proposal                                              | Exact selected head                        |
+| ----------------------------------------------------- | ------------------------------------------ |
+| [FS #88](https://github.com/napplet/naps/pull/88)     | `b640cf337c0481f0f9a0216c00843f797a5c6df6` |
 | [UPLOAD #33](https://github.com/napplet/naps/pull/33) | `a7cc17463cbf5d9cb87884b31071bc4fc826034c` |
 | [COMMON #67](https://github.com/napplet/naps/pull/67) | `de603e205a9b498f252be9a5e8e6825c4648df39` |
-| [LISTS #68](https://github.com/napplet/naps/pull/68) | `72fddac5def8f9bcbedd01dd942c530d89e335e0` |
+| [LISTS #68](https://github.com/napplet/naps/pull/68)  | `72fddac5def8f9bcbedd01dd942c530d89e335e0` |
 
 The pinned shim 0.30.0 already includes these envelopes and SDK bindings; no
 upstream dependency or authoritative NIP-5D revision change was needed. NIP-02,
@@ -387,6 +401,7 @@ verification. Both production web player and soyLI preview were exercised with
 the real pinned shim against isolated signed relay and Blossom fixtures, including
 mobile approval controls. This is not independent-client acceptance or full
 NAP conformance. No production deployment is part of this change.
+
 # Local dynamic-backend extension (2026-09-25)
 
 `soy.backends.v1` is a Soy MCP service family transported by the already pinned

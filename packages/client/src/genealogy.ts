@@ -1,5 +1,9 @@
 import { encodeAddress, identityAddress, type SignedEvent } from '../../protocol/src';
-import { validateManifest } from '../../protocol/src/manifest';
+import {
+  legacySnapshotAddress,
+  manifestFormat,
+  validateManifest,
+} from '../../protocol/src/manifest';
 import { nappletAddressSchema } from '../../protocol/src/remix';
 function single(event: SignedEvent, key: string) {
   const tags = event.tags.filter((t) => t[0] === key);
@@ -14,14 +18,14 @@ function addressLink(address: string) {
 async function ownAddress(event: SignedEvent) {
   const release = await validateManifest(event);
   if (release.identity) return identityAddress(release.identity);
-  const a = single(event, 'a');
-  return a && nappletAddressSchema.safeParse(a).success && a.split(':')[1] === event.pubkey
-    ? a
-    : null;
+  return legacySnapshotAddress(event);
 }
 export function hasAncestry(event: SignedEvent) {
   return event.tags.some(
-    (t) => t[0] === 'A' || t[0] === 'remix-version' || (t[0] === 'a' && event.kind !== 5129),
+    (t) =>
+      t[0] === 'A' ||
+      t[0] === 'remix-version' ||
+      (t[0] === 'a' && (event.kind !== 5129 || manifestFormat(event) === 'standalone')),
   );
 }
 export type Ancestor = {
@@ -83,8 +87,9 @@ export async function buildGenealogy(
         const path = `/n/${addressLink(origin)}`;
         if (!tree.origin) tree.origin = { address: origin, path };
       }
-      // Snapshot a identifies itself, never its parent. A alone identifies the origin, not an immediate parent.
-      const parent = event.kind === 5129 ? null : a;
+      // Only legacy snapshots use a for self-association. Standalone a/A are
+      // optional ancestry claims and never an ownership or playback dependency.
+      const parent = event.kind === 5129 && manifestFormat(event) === 'legacy' ? null : a;
       if (parent) addressLink(parent);
       if (revision && !/^[a-f0-9]{64}$/.test(revision))
         throw new Error('This release has an invalid parent revision.');

@@ -7,9 +7,14 @@ import {
   encodeAddress,
   type SignedEvent,
 } from '../../protocol/src';
-import { validateManifest } from '../../protocol/src/manifest';
+import {
+  legacySnapshotAddress,
+  validateManifest,
+  validateRelease,
+} from '../../protocol/src/manifest';
 import { appReferences, descriptorImages } from '../../protocol/src/preview';
 import { descriptorVideos } from '../../protocol/src/preview-video';
+import { standalonePresentationKey } from '../../protocol/src/presentation-pairs';
 import { repositoryRef } from '../../collaboration/src/protocol';
 import { diagnose, DiagnosticError } from '../../diagnostics/src';
 import type { LifecycleIO, LifecycleSigner } from './transport';
@@ -24,6 +29,8 @@ export type LifecyclePlan = {
   title: string;
   manifest: SignedEvent;
   manifests: SignedEvent[];
+  /** Exact verified pairs selected only for this author-confirmed deletion inventory. */
+  snapshotPairs?: { current: string; snapshot: string }[];
   metadata: SignedEvent[];
   sharedMetadata: string[];
   relays: string[];
@@ -54,12 +61,7 @@ const latest = (events: SignedEvent[]) =>
   [...events].sort((a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id))[0];
 export function nappletKey(e: SignedEvent) {
   e = verifiedEvent(e);
-  if (e.kind === 5129) {
-    const a = e.tags.find(
-      (t) => t[0] === 'a' && new RegExp(`^(35129|15129):${e.pubkey}:`).test(t[1]),
-    )?.[1];
-    return a ?? e.id;
-  }
+  if (e.kind === 5129) return legacySnapshotAddress(e) ?? e.id;
   if (![35129, 15129].includes(e.kind)) throw new Error('Expected a napplet manifest.');
   return `${e.kind}:${e.pubkey}:${e.kind === 15129 ? '' : (tag(e, 'd') ?? '')}`;
 }
@@ -105,6 +107,13 @@ export function ownedDeletion(e: SignedEvent, target: SignedEvent) {
     )
   );
 }
+async function lifecyclePair(current: SignedEvent, snapshot: SignedEvent) {
+  const release = await validateRelease(current, snapshot);
+  const presentation = standalonePresentationKey(current);
+  if (presentation && presentation !== standalonePresentationKey(snapshot))
+    throw new Error('Publication pair does not have the same signed presentation and timestamp.');
+  return release;
+}
 /** Inventory is read-only. Nothing is signed until the caller explicitly confirms a plan. */
 export async function planLifecycle(input: {
   manifest: SignedEvent;
@@ -113,6 +122,8 @@ export async function planLifecycle(input: {
   local?: boolean;
   operation?: Operation;
   saved?: SignedEvent[];
+  history?: { manifests: SignedEvent[]; complete: boolean; warnings: string[] };
+  snapshotPairs?: { current: SignedEvent; snapshot: SignedEvent }[];
   metadata?: SignedEvent[];
   extraBlobs?: { origin: string; hash: string; label: string }[];
 }): Promise<LifecyclePlan> {
@@ -125,10 +136,32 @@ export async function planLifecycle(input: {
     8,
   );
   if (!relays.length) throw new Error('Choose at least one relay.');
-  const warnings: string[] = [];
-  let complete = true;
+  const warnings: string[] = [...(input.history?.warnings ?? [])];
+  let complete = input.history?.complete ?? true;
+  if ((input.history?.manifests.length ?? 0) > 256)
+    throw new Error('Retained publication history exceeded its inventory limit.');
   const events = new Map<string, SignedEvent>();
-  for (const value of [manifest, ...(input.saved ?? []), ...(input.metadata ?? [])]) {
+  const snapshotPairs: NonNullable<LifecyclePlan['snapshotPairs']> = [];
+  if ((input.snapshotPairs?.length ?? 0) > 128)
+    throw new Error('Too many saved publication pairs.');
+  for (const pair of input.snapshotPairs ?? []) {
+    const release = await lifecyclePair(pair.current, pair.snapshot);
+    if (release.address !== key || pair.current.pubkey !== author)
+      throw new Error('Saved publication pair belongs to another napplet.');
+    events.set(pair.current.id, pair.current);
+    events.set(pair.snapshot.id, pair.snapshot);
+    if (!snapshotPairs.some((existing) => existing.snapshot === pair.snapshot.id))
+      snapshotPairs.push({ current: pair.current.id, snapshot: pair.snapshot.id });
+  }
+  const pairedSnapshots = new Set(snapshotPairs.map((pair) => pair.snapshot));
+  const belongs = (event: SignedEvent) =>
+    nappletKey(event) === key || pairedSnapshots.has(event.id);
+  for (const value of [
+    manifest,
+    ...(input.saved ?? []),
+    ...(input.history?.manifests ?? []),
+    ...(input.metadata ?? []),
+  ]) {
     const e = verifiedEvent(value);
     if (e.pubkey === author) events.set(e.id, e);
   }
@@ -147,17 +180,47 @@ export async function planLifecycle(input: {
   await Promise.all(
     relays.map((r) => read(r, { authors: [author], kinds: [35129, 15129, 5129, 5], limit: 500 })),
   );
-  const manifests: SignedEvent[] = [],
-    others: SignedEvent[] = [];
+  const verified: SignedEvent[] = [];
   for (const e of events.values())
     if ([35129, 15129, 5129].includes(e.kind) && e.pubkey === author) {
       try {
         await validateManifest(e);
-        (nappletKey(e) === key ? manifests : others).push(e);
+        verified.push(e);
       } catch {
         /* Other, invalid publications do not enter the deletion scope. */
       }
     }
+  // A fresh client can review exact pairs without a publisher journal. Matching
+  // bytes or ancestry alone never selects a snapshot, and selecting an
+  // independent snapshot never expands the inventory to a named parent.
+  const presentations = new Map<string, SignedEvent>();
+  for (const event of verified) {
+    const presentation =
+      event.kind !== 5129 && nappletKey(event) === key && standalonePresentationKey(event);
+    if (presentation) presentations.set(presentation, event);
+  }
+  for (const snapshot of verified) {
+    if (snapshot.kind !== 5129 || pairedSnapshots.has(snapshot.id)) continue;
+    const presentation = standalonePresentationKey(snapshot);
+    const current = presentation && presentations.get(presentation);
+    if (!current) continue;
+    if (snapshotPairs.length >= 128) {
+      complete = false;
+      warnings.push(
+        'Exact publication pairs exceeded the 128-pair inventory limit. Remaining snapshots and hosted files are retained.',
+      );
+      continue;
+    }
+    await lifecyclePair(current, snapshot);
+    snapshotPairs.push({ current: current.id, snapshot: snapshot.id });
+    pairedSnapshots.add(snapshot.id);
+  }
+  const manifests = verified.filter(belongs),
+    others = verified.filter((event) => !belongs(event));
+  if (manifests.length > 500)
+    throw new Error(
+      'Publication inventory exceeds 500 releases. Narrow the selection before deleting.',
+    );
   const current = latest(manifests.filter((e) => e.kind !== 5129)) ?? manifest;
   if (!manifests.length) throw new Error('No verified releases in the selected publication.');
   const inventoryFiles = !input.operation || input.operation === 'delete';
@@ -237,10 +300,12 @@ export async function planLifecycle(input: {
       if (!other) warnings.push(`${label} is not a supported managed URL.`);
     }
   };
-  const inventory = (m: SignedEvent, other = false) => {
-    const servers = m.tags.filter((t) => t[0] === 'server').map((t) => t[1]);
-    for (const path of m.tags.filter((t) => t[0] === 'path'))
-      for (const s of servers) add(s, path[2], `Build ${path[1]}`, other);
+  const inventory = async (m: SignedEvent, other = false) => {
+    const release = await validateManifest(m);
+    for (const server of release.servers) {
+      add(server, release.artifactHash, 'Build /index.html', other);
+      if (release.icon) add(server, release.icon.hash, 'Icon', other);
+    }
     addURL(tag(m, 'source-archive'), 'Source archive', other);
     for (const d of metadataFor(m)) {
       for (const u of descriptorImages(d)) addURL(u, 'Preview image', other);
@@ -248,8 +313,8 @@ export async function planLifecycle(input: {
     }
   };
   if (inventoryFiles) {
-    manifests.forEach((m) => inventory(m));
-    others.forEach((m) => inventory(m, true));
+    for (const m of manifests) await inventory(m);
+    for (const m of others) await inventory(m, true);
   }
   for (const b of inventoryFiles ? (input.extraBlobs ?? []) : []) add(b.origin, b.hash, b.label);
   // External resources are referenced in signed HTML. Read, hash-check, never execute it.
@@ -289,10 +354,9 @@ export async function planLifecycle(input: {
         const hashes = await runtimeCache.get(cacheKey)!;
         if (hashes)
           for (const hash of hashes)
-            for (const server of release.servers)
-              add(server, hash, 'Runtime asset', nappletKey(m) !== key);
+            for (const server of release.servers) add(server, hash, 'Runtime asset', !belongs(m));
         else {
-          if (nappletKey(m) !== key) resourceInventoryComplete = false;
+          if (!belongs(m)) resourceInventoryComplete = false;
           complete = false;
           warnings.push(
             `Runtime assets could not be enumerated for ${tag(m, 'title') ?? m.id.slice(0, 12)}. Files are retained until a complete inventory is available.`,
@@ -366,6 +430,7 @@ export async function planLifecycle(input: {
     title: (tag(current, 'title') ?? 'Untitled napplet').slice(0, 160),
     manifest: current,
     manifests,
+    ...(snapshotPairs.length ? { snapshotPairs } : {}),
     metadata,
     sharedMetadata,
     relays,
@@ -499,6 +564,12 @@ export async function executeLifecycle(
   await validateManifest(plan.manifest);
   if (plan.author !== plan.manifest.pubkey || plan.key !== nappletKey(plan.manifest))
     throw new Error('Invalid saved lifecycle identity.');
+  for (const pair of plan.snapshotPairs ?? []) {
+    const current = plan.manifests.find((event) => event.id === pair.current)!;
+    const snapshot = plan.manifests.find((event) => event.id === pair.snapshot)!;
+    const release = await lifecyclePair(current, snapshot);
+    if (release.address !== plan.key) throw new Error('Saved publication pair changed identity.');
+  }
   // Validate persisted destinations again, even when retrying after a restart.
   for (const relay of plan.relays) lifecycleEndpoint(relay, 'relay', options.local);
   const signOnce = async (key: string, template: EventTemplate) => {
@@ -767,8 +838,26 @@ export function parseReceipt(value: unknown): LifecycleReceipt {
   verifiedEvent(r.plan.manifest);
   if (r.plan.author !== r.plan.manifest.pubkey || r.plan.key !== nappletKey(r.plan.manifest))
     throw new Error('Lifecycle record does not match its signed author.');
+  const paired = new Set<string>();
+  for (const pair of r.plan.snapshotPairs ?? []) {
+    const current = r.plan.manifests.find((event) => event.id === pair.current);
+    const snapshot = r.plan.manifests.find((event) => event.id === pair.snapshot);
+    if (
+      !current ||
+      !snapshot ||
+      current.kind === 5129 ||
+      snapshot.kind !== 5129 ||
+      nappletKey(current) !== r.plan.key ||
+      paired.has(snapshot.id)
+    )
+      throw new Error('Lifecycle record contains an invalid publication pair.');
+    paired.add(snapshot.id);
+  }
   for (const e of r.plan.manifests)
-    if (verifiedEvent(e).pubkey !== r.plan.author || nappletKey(e) !== r.plan.key)
+    if (
+      verifiedEvent(e).pubkey !== r.plan.author ||
+      (nappletKey(e) !== r.plan.key && !paired.has(e.id))
+    )
       throw new Error('Lifecycle record contains an unrelated release.');
   for (const e of r.plan.metadata) verifiedEvent(e);
   for (const e of Object.values(r.events))
@@ -797,6 +886,10 @@ const receiptSchema = z.object({
     title: z.string().max(160),
     manifest: eventSchema,
     manifests: z.array(eventSchema).min(1).max(500),
+    snapshotPairs: z
+      .array(z.object({ current: digest, snapshot: digest }).strict())
+      .max(128)
+      .optional(),
     metadata: z.array(eventSchema).max(160),
     sharedMetadata: z.array(text).max(1000).default([]),
     relays: z.array(text).min(1).max(8),

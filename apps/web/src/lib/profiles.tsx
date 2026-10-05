@@ -52,12 +52,25 @@ class ProfileCache {
     }
     this.schedule();
     try {
-      const events = await protocolClient().query([
-        { kinds: [0], authors: keys, limit: keys.length * 2 },
-      ]);
-      for (const key of keys) {
-        const event = latestProfile(events, key);
-        if (!event || manifestAllowed(event)) this.seed(profileView(key, event));
+      const client = protocolClient();
+      const filters = [{ kinds: [0], authors: keys, limit: keys.length * 2 }];
+      const seen = new Set<string>();
+      const update = (events: Parameters<typeof latestProfile>[0], final = false) => {
+        for (const key of keys) {
+          const event = latestProfile(events, key);
+          // Pick the winner before moderation; never resurrect an older avatar/name.
+          if (event) {
+            seen.add(key);
+            this.seed(profileView(key, manifestAllowed(event) ? event : null));
+          } else if (final || seen.has(key)) this.seed(profileView(key, null));
+        }
+      };
+      const projection = client.store.timeline(filters).subscribe((events) => update(events));
+      try {
+        const events = await client.query(filters);
+        update([...client.store.getByFilters(filters), ...events], true);
+      } finally {
+        projection.unsubscribe();
       }
     } catch {
     } finally {

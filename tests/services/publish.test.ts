@@ -473,6 +473,13 @@ test('collaboration: two creators publish, propose, review the exact Git tip, me
     const descriptor = await fetch(tag(found.revision, 'soy-preview')!).then((r) => r.bytes());
     const preview = await validatePreview(descriptor, found.revision);
     expect(preview.commit).toBe(found.head!);
+    expect(preview.manifest.content.trim()).not.toBe('');
+    expect(preview.manifest.tags.filter((t) => t[0] === 'x')).toEqual([
+      ['x', preview.artifactHash],
+    ]);
+    expect(
+      preview.manifest.tags.some((t) => ['path', 'requires', 'description', 'd'].includes(t[0])),
+    ).toBe(false);
     // An independent Git client retrieves the proposal's exact c tag and contributor ancestry.
     const observer = join(services.directory, 'observer');
     await sourceGit(services.directory, ['clone', found.clones[0], observer]);

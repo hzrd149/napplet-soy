@@ -162,3 +162,50 @@ test('mutation reads refuse a partial relay view even when one relay supplies ev
     relays.forEach((r) => r.stop(true));
   }
 });
+
+test('publication returns on a fast acknowledgement while the other relay still receives the event', async () => {
+  const event = sign(7, '+');
+  let acknowledgeSlow: (() => void) | undefined;
+  let sawFast!: () => void;
+  const fastAcknowledged = new Promise<void>((resolve) => {
+    sawFast = resolve;
+  });
+  const received: string[] = [];
+  const relays = [true, false].map((fast) =>
+    Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch: (r, server) => (server.upgrade(r) ? undefined : new Response()),
+      websocket: {
+        message(socket, raw) {
+          const message = JSON.parse(String(raw));
+          if (message[0] !== 'EVENT') return;
+          received.push(message[1].id);
+          const acknowledge = () => socket.send(JSON.stringify(['OK', event.id, true, 'saved']));
+          if (fast) {
+            acknowledge();
+            sawFast();
+          } else acknowledgeSlow = acknowledge;
+        },
+      },
+    }),
+  );
+  const urls = relays.map((r) => `ws://127.0.0.1:${r.port}`);
+  const client = new ProtocolClient(() => urls);
+  const publication = client.publish(event);
+  try {
+    await fastAcknowledged;
+    const accepted = await Promise.race([publication, Bun.sleep(300).then(() => null)]);
+    expect(accepted).toEqual([`${urls[0]}/`]);
+    // First acceptance can arrive before the other socket has delivered its write.
+    // Fanout must finish delivering promptly; it need not precede the first ACK.
+    for (let i = 0; i < 30 && received.length < 2; i++) await Bun.sleep(10);
+    expect(received).toEqual([event.id, event.id]);
+    expect(client.store.hasEvent(event.id)).toBe(true);
+  } finally {
+    acknowledgeSlow?.();
+    await publication.catch(() => {});
+    client.close();
+    relays.forEach((r) => r.stop(true));
+  }
+});

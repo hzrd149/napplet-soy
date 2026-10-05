@@ -129,3 +129,48 @@ test('root napplet parent addresses work without a named d tag', async () => {
   expect(tree?.nodes.map((node) => node.title)).toEqual(['root remix', 'root']);
   expect(tree?.gap).toBeNull();
 });
+
+test('standalone snapshots follow a as ancestry without mistaking same-author parents for self', async () => {
+  const parent = finalizeEvent(
+    {
+      kind: 35129,
+      created_at: 1,
+      content: 'Parent',
+      tags: [
+        ['d', 'parent'],
+        ['title', 'parent'],
+        ['x', fixtures[0].artifactHash],
+      ],
+    },
+    key,
+  );
+  for (const signer of [key, new Uint8Array(32).fill(2)]) {
+    const child = finalizeEvent(
+      {
+        kind: 5129,
+        created_at: 2,
+        content: 'Child',
+        tags: [
+          ['title', 'child'],
+          ['x', fixtures[0].artifactHash],
+          ['a', address('parent')],
+        ],
+      },
+      signer,
+    );
+    const tree = await buildGenealogy(child, find([parent]));
+    expect(tree?.nodes.map((node) => node.title)).toEqual(['child', 'parent']);
+    expect(tree?.nodes[0].path).toBe(`/r/${child.id}`);
+    expect(tree?.gap).toBeNull();
+  }
+  const standalone = finalizeEvent(
+    {
+      kind: 5129,
+      created_at: 3,
+      content: 'No ancestry',
+      tags: [['x', fixtures[0].artifactHash]],
+    },
+    key,
+  );
+  expect(await buildGenealogy(standalone, find([]))).toBeNull();
+});

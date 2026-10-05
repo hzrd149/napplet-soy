@@ -12,6 +12,8 @@ import {
   type CachedPreview,
 } from '../../protocol/src/preview';
 import { fetchPublicBytes, publicResourceUrl } from './blossom';
+import { manifestIcon } from '../../protocol/src/manifest';
+import { iconSources, verifyIconBytes } from '../../protocol/src/icon';
 
 export function previewImageUrl(input: string) {
   if (input.length > 4096) throw new Error('Preview URL is too long');
@@ -122,6 +124,10 @@ export async function indexPreviewImages(
             }));
           })
           .sort((a, b) => a.priority - b.priority);
+        // Keep screenshots as covers; a standalone manifest can supply its own verified icon.
+        candidates.push(...iconSources(entry.manifest).map((url) => ({
+          descriptor: entry.manifest, profile: undefined, url, priority: 3,
+        })));
         for (const { descriptor, profile, url } of candidates) {
           if (signal.aborted) break;
           try {
@@ -145,7 +151,9 @@ export async function indexPreviewImages(
               entry.preview = old;
               break;
             }
-            let task = downloaded.get(url);
+            const icon = descriptor.id === entry.manifest.id ? manifestIcon(entry.manifest) : null;
+            const downloadKey = `${url}:${icon?.mime ?? 'preview'}`;
+            let task = downloaded.get(downloadKey);
             if (!task) {
               if (remaining < MAX_PREVIEW_BYTES)
                 throw new Error('Preview refresh budget exhausted');
@@ -161,6 +169,7 @@ export async function indexPreviewImages(
                 if (signal.aborted) throw new Error('Preview refresh cancelled');
                 if (digest && (await sha256(bytes)) !== digest)
                   throw new Error('Preview hash mismatch');
+                if (icon) await verifyIconBytes(bytes, icon);
                 const normalized = await normalizePreview(bytes);
                 const hash = await sha256(normalized.data);
                 const temporary = resolve(path, `${hash}.${crypto.randomUUID()}.tmp`);
@@ -173,7 +182,7 @@ export async function indexPreviewImages(
                   bytes: normalized.data.length,
                 };
               })();
-              downloaded.set(url, task);
+              downloaded.set(downloadKey, task);
             }
             entry.preview = { descriptor, profile, url, ...(await task) };
             break;

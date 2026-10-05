@@ -1,4 +1,4 @@
-import { gallerySocial, readSocial, publishSocial } from '@/lib/protocol-social';
+import { gallerySocial, publishSocial } from '@/lib/protocol-social';
 import {
   createContext,
   useCallback,
@@ -24,6 +24,8 @@ import {
 import type { GallerySearch, SignedEvent } from '../../../../packages/protocol/src';
 import type { GallerySocialData } from '../../../../packages/backend/src/gallery-social';
 import { publicLink, type PublicNapplet } from '../../../../packages/backend/src/public-model';
+import { protocolClient } from '@/lib/network';
+import { readLikeState } from '../../../../packages/client/src/social';
 import { useZapTotals, zapTotalsStore } from '@/lib/zap-totals';
 
 const Context = createContext<{
@@ -72,6 +74,10 @@ export function GallerySocialProvider({
     tag: search.tag,
     sort: search.sort,
     unavailable: String(!!search.unavailable),
+    archetype: search.archetype ?? '',
+    intent: search.intent ?? '',
+    requiredDomain: search.requiredDomain ?? '',
+    optionalDomain: search.optionalDomain ?? '',
     ...(pubkey ? { viewer: pubkey } : {}),
   }).toString();
   useEffect(() => {
@@ -127,13 +133,13 @@ export function GallerySocialProvider({
     setBusy(true);
     setMessage(null);
     try {
-      const state = await readSocial(napplet.manifest, napplet.relays);
+      const state = await readLikeState(protocolClient(), napplet.manifest, pubkey, napplet.relays);
       if (key.current !== pubkey) throw new Error('Your connected account changed.');
       const own = (state.likes as SignedEvent[]).filter((e) => e.pubkey === pubkey);
       const template = own.length
         ? deletionTemplate(own)
         : likeTemplate(state.scope, state.manifest);
-      template.created_at = Math.max(template.created_at, (state.lastActions[pubkey] ?? 0) + 1);
+      template.created_at = Math.max(template.created_at, state.lastAction + 1);
       setPhase('Signing…');
       const event = await signForAccount(pubkey, template);
       if (key.current !== pubkey) throw new Error('Your connected account changed.');

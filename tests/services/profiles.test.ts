@@ -185,6 +185,7 @@ test('portable profiles, SSR/OG, pagination, kind-0 editing, remembered names an
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: join(root, '.local/profiles-desktop.png'), fullPage: false });
     await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    await page.getByRole('button', { name: 'Extension', exact: true }).click();
     await page.getByRole('button', { name: 'Connect browser extension', exact: true }).click();
     await browserExpect(page.getByRole('button', { name: 'Edit your profile' })).toBeVisible();
     await page.getByRole('button', { name: 'Edit your profile' }).click();
@@ -273,6 +274,7 @@ test('portable profiles, SSR/OG, pagination, kind-0 editing, remembered names an
     }, newPubkey);
     await newcomer.goto(`${origin}/p/${newPubkey}`);
     await newcomer.getByRole('button', { name: 'Connect', exact: true }).click();
+    await newcomer.getByRole('button', { name: 'Extension', exact: true }).click();
     await newcomer.getByRole('button', { name: 'Connect browser extension', exact: true }).click();
     await newcomer.getByRole('button', { name: 'Create your profile' }).click();
     await newcomer.getByLabel('Display name', { exact: true }).fill('First little world');

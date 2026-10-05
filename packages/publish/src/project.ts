@@ -1,4 +1,4 @@
-import { validateAssets, ASSET_LOCK, ASSET_MODULE, ASSET_TYPES } from '../../assets/src';
+import { validateAssets, ASSET_LOCK, ASSET_MODULE, ASSET_TYPES, assetMime } from '../../assets/src';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, realpath, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
@@ -20,6 +20,8 @@ import { effectiveProject } from './binding';
 import { committedSource, inspectHistory } from './git-source';
 import { readModule } from '../../dynamic-backends/src/module-source';
 import { MAX_SOURCE_FILES } from './limits';
+import { createSourceFileReader } from './source-links';
+import { materializeSourceArchive } from './source-archive';
 
 export const MAX_SOURCE_BYTES = 40 * 1024 * 1024;
 export type SourceFile = { path: string; hash: string; size: number };
@@ -41,7 +43,7 @@ export async function regularFile(root: string, path: string, limit: number) {
     if ((await lstat(current)).isSymbolicLink())
       throw new PublishError(
         'SOURCE_PATH',
-        `Source path ${path} contains a symlink. Replace it with a regular file or remove it, then save a checkpoint. Safe internal file aliases may remain in earlier commits; no history rewrite is needed for those aliases.`,
+        `Path ${path} must be a regular file. Public source aliases are supported separately, but configuration, playable artifacts, managed assets and presentation files cannot be symlinks.`,
       );
   }
   const file = await open(current, constants.O_RDONLY | constants.O_NOFOLLOW);
@@ -101,6 +103,7 @@ export async function inspectProject(
   overrides: Partial<Targets> = {},
   frozenCommit?: string,
   frozenFiles?: string[],
+  manifestFormat: 'standalone' | 'legacy' = 'standalone',
 ) {
   const root = await realpath(directory);
   let configBytes = await regularFile(root, 'napplet.json', 16384);
@@ -109,10 +112,13 @@ export async function inspectProject(
     project = projectSchema.parse(
       JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(configBytes)),
     );
-  } catch {
+  } catch (cause) {
     throw new PublishError(
       'PROJECT_CONFIG',
-      'Invalid napplet.json. Choose index.html or the upstream dist/index.html artifact.',
+      'Invalid napplet.json. Check the entry and manifest metadata: optionalDomains contains bare NAP names, archetypes contains labels, intents contains queryless intent/parameters objects with at most 14 parameter names each, and icon.file names a local PNG, JPEG or WebP.',
+      'check',
+      false,
+      cause,
     );
   }
   project = await effectiveProject(root, project);
@@ -152,6 +158,7 @@ export async function inspectProject(
         : []),
       ...(project.preview?.image ? [project.preview.image] : []),
       ...(project.preview?.video ? [project.preview.video.file] : []),
+      ...(project.icon ? [project.icon.file] : []),
     ]),
   ].sort();
   if (selected.length > MAX_SOURCE_FILES)
@@ -166,6 +173,21 @@ export async function inspectProject(
     );
   const files: SourceFile[] = [],
     contents = new Map<string, Uint8Array>();
+  const sourceFile = await createSourceFileReader(root, new Set(selected), {
+    regularFile,
+    checkSource,
+  });
+  const strictFiles = new Set([
+    'index.html',
+    project.entry,
+    ASSET_LOCK,
+    ASSET_MODULE,
+    ASSET_TYPES,
+    ...managed.assets.map((asset) => asset.path),
+    project.preview?.image,
+    project.preview?.video?.file,
+    project.icon?.file,
+  ]);
   let total = 0;
   for (const path of selected) {
     let bytes: Uint8Array;
@@ -173,11 +195,13 @@ export async function inspectProject(
       bytes =
         path === 'napplet.json'
           ? configBytes
-          : await regularFile(
-              root,
-              path,
-              path === project.entry ? MAX_ARTIFACT_BYTES : MAX_SOURCE_BYTES,
-            );
+          : strictFiles.has(path)
+            ? await regularFile(
+                root,
+                path,
+                path === project.entry ? MAX_ARTIFACT_BYTES : MAX_SOURCE_BYTES,
+              )
+            : await sourceFile(path, MAX_SOURCE_BYTES);
     } catch (error) {
       if (path === project.entry && (error as NodeJS.ErrnoException).code === 'ENOENT')
         throw new PublishError(
@@ -187,9 +211,13 @@ export async function inspectProject(
       if (
         (error as NodeJS.ErrnoException).code === 'ENOENT' &&
         !project.publish?.files &&
-        !['index.html', 'LICENSE', project.preview?.image, project.preview?.video?.file].includes(
-          path,
-        )
+        ![
+          'index.html',
+          'LICENSE',
+          project.preview?.image,
+          project.preview?.video?.file,
+          project.icon?.file,
+        ].includes(path)
       )
         continue;
       throw error;
@@ -209,6 +237,8 @@ export async function inspectProject(
           'SOURCE_REQUIRED',
           `Backend source is missing from the snapshot: ${file}. Track every declared module manifest, handler and schema, and include them in publish.files when selecting source explicitly.`,
         );
+      // Backend build inputs retain their existing regular-file contract.
+      await regularFile(root, file, MAX_SOURCE_BYTES);
       return bytes;
     });
   if (
@@ -240,12 +270,38 @@ export async function inspectProject(
       'PROJECT_CAPABILITY',
       `Unsupported required domains: ${missing.join(', ')}.`,
     );
+  let icon:
+    | { file: string; hash: string; bytes: number; mime: 'image/png' | 'image/jpeg' | 'image/webp' }
+    | undefined;
+  if (project.icon) {
+    const bytes = contents.get(project.icon.file)!;
+    const mime = assetMime(bytes);
+    if (
+      !bytes.length ||
+      bytes.length > 5 * 1024 * 1024 ||
+      !['image/png', 'image/jpeg', 'image/webp'].includes(mime) ||
+      (project.icon.mime && project.icon.mime !== mime)
+    )
+      throw new PublishError(
+        'PROJECT_ICON',
+        'Use a PNG, JPEG or WebP icon no larger than 5 MiB, with a matching MIME type.',
+      );
+    icon = {
+      file: project.icon.file,
+      hash: await sha256(bytes),
+      bytes: bytes.length,
+      mime: mime as 'image/png' | 'image/jpeg' | 'image/webp',
+    };
+  }
   const plan = {
     network,
     pubkey,
     identifier: projectIdentity(project),
     title: project.title ?? project.name,
-    description: project.description,
+    description:
+      manifestFormat === 'standalone'
+        ? project.description.trim() || project.title?.trim() || project.name.trim() || 'A napplet.'
+        : project.description,
     license: project.license,
     requires,
     topics: projectTopics(project),
@@ -257,6 +313,28 @@ export async function inspectProject(
     sourceCommit:
       frozenCommit ?? (await sourceGit(root, ['rev-parse', 'HEAD']).catch(() => '0'.repeat(40))),
     ...(project.remix ? { remix: project.remix } : {}),
+    ...(manifestFormat === 'standalone'
+      ? {
+          manifestFormat: 'standalone' as const,
+          ...(project.optionalDomains
+            ? {
+                optionalDomains: [...new Set(project.optionalDomains)].filter(
+                  (d) => !requires.includes(d),
+                ),
+              }
+            : {}),
+          ...(project.archetypes ? { archetypes: [...new Set(project.archetypes)] } : {}),
+          ...(project.intents
+            ? {
+                intents: project.intents.map((i) => ({
+                  ...i,
+                  parameters: [...new Set(i.parameters)],
+                })),
+              }
+            : {}),
+          ...(icon ? { icon } : {}),
+        }
+      : {}),
   };
   return { root, plan, contents, fingerprint: await sha256(JSON.stringify(plan)) };
 }
@@ -278,7 +356,7 @@ export async function freezeSource(
   createdAt: number,
   parent: { directory: string; commit: string },
 ) {
-  await inspectHistory(parent.directory, parent.commit);
+  const history = await inspectHistory(parent.directory, parent.commit);
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const repo = join(directory, 'source');
   await rm(repo, { recursive: true, force: true });
@@ -300,9 +378,12 @@ export async function freezeSource(
   const commit = parent.commit;
   const archive = join(directory, 'source.tar');
   await sourceGit(repo, ['archive', '--format=tar', `--output=${archive}`, commit]);
-  const bytes = await regularFile(directory, 'source.tar', 50 * 1024 * 1024);
+  const original = await regularFile(directory, 'source.tar', 50 * 1024 * 1024);
+  const bytes = materializeSourceArchive(original, history.aliases);
   const file = await open(archive, 'r+');
   try {
+    await file.writeFile(bytes);
+    await file.truncate(bytes.length);
     await file.sync();
   } finally {
     await file.close();
