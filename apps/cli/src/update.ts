@@ -7,7 +7,7 @@ import {
   formatDiagnostic,
   ToolOutput,
 } from '../../../packages/diagnostics/src';
-import { standalone, version } from './distribution';
+import { packagedBy, standalone, version } from './distribution';
 import installer from '../../web/public/install.sh' with { type: 'text' };
 
 export const releaseRepository = 'zeSchlausKwab/napplet-soy';
@@ -165,7 +165,10 @@ export async function releaseCheck(signal?: AbortSignal) {
 
 export function describeRelease(check: Awaited<ReturnType<typeof releaseCheck>>) {
   if (check.status === 'unavailable') return `unavailable\n${formatDiagnostic(check.diagnostic)}`;
-  if (check.status === 'update-available') return `${check.latest} available; run soyli update`;
+  if (check.status === 'update-available')
+    return packagedBy
+      ? `${check.latest} available; update soyLI through ${packagedBy}`
+      : `${check.latest} available; run soyli update`;
   if (check.status === 'current') return `${check.latest} (up to date)`;
   if (check.status === 'ahead')
     return `installed ${check.current} is newer than published ${check.latest}; no downgrade`;
@@ -181,6 +184,18 @@ async function installation() {
         recovery:
           'Update your checkout with Git. For a managed binary installation, use the installer from GitHub Releases.',
         target: releasesUrl,
+      },
+    );
+  if (packagedBy)
+    throw new DiagnosticError(
+      'UPDATE_INSTALLATION',
+      `This soyLI executable is managed by ${packagedBy}.`,
+      {
+        target: process.execPath,
+        recovery:
+          packagedBy === 'nix'
+            ? 'Update the flake input or package set that provides soyli (e.g. nix flake update, then rebuild or nix profile upgrade). The installed CLI is unchanged.'
+            : `Update soyli with ${packagedBy}. The installed CLI is unchanged.`,
       },
     );
   const executable = await realpath(process.execPath);

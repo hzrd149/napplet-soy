@@ -16,7 +16,7 @@ import { materializePreview } from './frozen-preview';
 import { effectiveProject } from '../../../packages/publish/src/binding';
 import { validateAssets, ASSET_LOCK } from '../../../packages/assets/src';
 import { browserEngine, installBrowser } from './browser';
-import { version } from './distribution';
+import { hostEnvironment, version } from './distribution';
 import { installNetworkLab, networkConditions, type NetworkConditions } from './network-lab';
 import { previewAssets } from './preview/assets';
 import { startPreviewServer } from './preview/server';
@@ -68,6 +68,7 @@ async function startTestTurn(directory: string, binary: string) {
     { mode: 0o600 },
   );
   const process = Bun.spawn([binary, '-c', config], {
+    env: hostEnvironment(),
     stdout: Bun.file(join(directory, 'turn.log')),
     stderr: 'ignore',
   });

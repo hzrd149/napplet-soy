@@ -1,9 +1,11 @@
 import { AccountError } from '../../../packages/identity/src/signer';
+import { hostEnvironment } from './distribution';
 
 export async function gitAvailable() {
   const git = Bun.which('git');
   if (!git) return false;
   const child = Bun.spawn([git, '--version'], {
+    env: hostEnvironment(),
     stdin: 'ignore',
     stdout: 'ignore',
     stderr: 'ignore',

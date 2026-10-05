@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pins from '../vendor/toolchain.json';
@@ -311,6 +311,73 @@ exit 23
         expect(stderr).toContain('Next:');
       }
     }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('a packager-provided toolchain is used without downloads and reports mismatches', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'soyli-provided-toolchain-'));
+  try {
+    const provided = join(root, 'provided');
+    await mkdir(provided, { recursive: true });
+    const node = join(provided, 'node');
+    const pnpm = join(provided, 'pnpm.cjs');
+    await writeFile(pnpm, '// fixture');
+    await writeFile(
+      join(root, 'package.json'),
+      JSON.stringify({ packageManager: `pnpm@${pins.pnpm.version}` }),
+    );
+    const cache = join(root, 'cache');
+    const setup = async (env: Record<string, string>) => {
+      const child = Bun.spawn([...command, 'setup', '--project', root, '--json'], {
+        cwd: root,
+        env: {
+          PATH: '/usr/bin:/bin',
+          SPACE_TOOLCHAIN_CACHE: cache,
+          SPACE_ACCOUNT_HOME: join(root, 'accounts'),
+          ...env,
+        },
+        stdin: 'ignore',
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      const [code, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(code, stdout + stderr).toBe(1);
+      expect(stderr).not.toContain('Preparing');
+      return JSON.parse(stdout).error;
+    };
+    const fixture = (version: string) =>
+      writeFile(
+        node,
+        `#!/bin/sh
+if [ "$1" = --version ]; then printf '${version}\\n'; exit 0; fi
+printf 'fixture: provided node ran\\n' >&2
+exit 29
+`,
+        { mode: 0o755 },
+      );
+    const pinned = process.platform === 'darwin' ? undefined : `v${pins.node.version}`;
+    if (pinned) {
+      await fixture(pinned);
+      const used = await setup({ SOYLI_NODE: node, SOYLI_PNPM: pnpm });
+      expect(used.code).toBe('PROJECT_TOOL');
+      expect(used.details.join('\n')).toContain('provided node ran');
+      // Only the writable pnpm link directory is created; nothing was downloaded.
+      expect((await readdir(cache)).filter((name) => !name.startsWith('bin-'))).toEqual([]);
+    }
+    await fixture('v0.0.1');
+    const mismatch = await setup({ SOYLI_NODE: node, SOYLI_PNPM: pnpm });
+    expect(mismatch.code).toBe('TOOLCHAIN_VERSION');
+    expect(mismatch.details).toContain(`Target: ${node}`);
+    expect(mismatch.recovery).toContain('SOYLI_NODE');
+    const incomplete = await setup({ SOYLI_NODE: node });
+    expect(incomplete.code).toBe('TOOLCHAIN_PROVIDED');
+    expect(incomplete.recovery).toContain('SOYLI_PNPM');
   } finally {
     await rm(root, { recursive: true, force: true });
   }

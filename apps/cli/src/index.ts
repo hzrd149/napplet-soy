@@ -32,7 +32,7 @@ import { initModule, checkModule, moduleCommand } from './dynamic-backend';
 import { checkPublication } from './publish-check';
 import { preview, checkProject, doctor } from './local';
 import { installBrowser, browserPaths } from './browser';
-import { commandName, version } from './distribution';
+import { commandName, hostEnvironment, version } from './distribution';
 import { describeRelease, updateCli } from './update';
 import { setupProject, buildProject, projectTool, installConformanceBrowser } from './toolchain';
 import { installCreatorSkills } from './creator-kit';
@@ -1026,7 +1026,11 @@ try {
                 if (values.open) {
                   const opener = process.platform === 'darwin' ? 'open' : 'xdg-open';
                   try {
-                    const child = Bun.spawn([opener, uri], { stdout: 'ignore', stderr: 'ignore' });
+                    const child = Bun.spawn([opener, uri], {
+                      env: hostEnvironment(),
+                      stdout: 'ignore',
+                      stderr: 'ignore',
+                    });
                     void child.exited;
                   } catch {
                     console.log('Could not open your signer. Copy the link above.');

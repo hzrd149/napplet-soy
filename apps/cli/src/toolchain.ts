@@ -8,9 +8,9 @@ import {
 } from './rust-build';
 import { DiagnosticError, ToolOutput } from '../../../packages/diagnostics/src';
 import { validateAssets } from '../../../packages/assets/src';
-import { chmod, lstat, mkdir, mkdtemp, rename, rm, symlink } from 'node:fs/promises';
+import { chmod, lstat, mkdir, mkdtemp, readlink, rename, rm, symlink } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import pins from '../vendor/toolchain.json';
 import { AccountError } from '../../../packages/identity/src/signer';
@@ -68,6 +68,44 @@ async function download(url: string, target: string, digest: string, signal?: Ab
   await Bun.write(target, bytes);
 }
 
+/**
+ * Packagers (e.g. Nix) can supply the pinned Node and pnpm instead of runtime
+ * downloads. Both must be set; the Node version is still checked before use.
+ */
+async function providedToolchain() {
+  const nodeBin = process.env.SOYLI_NODE,
+    pnpm = process.env.SOYLI_PNPM;
+  if (!nodeBin && !pnpm) return undefined;
+  const recovery =
+    'Set both SOYLI_NODE (Node binary) and SOYLI_PNPM (pnpm.cjs) to absolute paths, or unset both to use the managed toolchain.';
+  if (!nodeBin || !pnpm || !isAbsolute(nodeBin) || !isAbsolute(pnpm))
+    throw new DiagnosticError(
+      'TOOLCHAIN_PROVIDED',
+      'The provided project toolchain is incomplete.',
+      {
+        operation: 'resolve provided project toolchain',
+        recovery,
+      },
+    );
+  for (const path of [nodeBin, pnpm]) {
+    const stat = await lstat(path).catch((cause) => {
+      throw new DiagnosticError('TOOLCHAIN_PROVIDED', 'A provided toolchain file is missing.', {
+        operation: 'resolve provided project toolchain',
+        target: path,
+        recovery,
+        cause,
+      });
+    });
+    if (stat.isDirectory())
+      throw new DiagnosticError('TOOLCHAIN_PROVIDED', 'A provided toolchain path is a directory.', {
+        operation: 'resolve provided project toolchain',
+        target: path,
+        recovery,
+      });
+  }
+  return { nodeBin, pnpm };
+}
+
 let preparing: Promise<Awaited<ReturnType<typeof prepare>>> | undefined;
 async function prepare(signal?: AbortSignal) {
   const platform = `${process.platform}-${process.arch}`;
@@ -94,8 +132,9 @@ async function prepare(signal?: AbortSignal) {
   await mkdir(root, { recursive: true, mode: 0o700 });
   const nodeRoot = join(root, node.directory),
     pnpmRoot = join(root, `pnpm-${pins.pnpm.version}`);
-  const nodeBin = join(nodeRoot, 'bin/node'),
-    pnpm = join(pnpmRoot, 'package/bin/pnpm.cjs');
+  const provided = await providedToolchain();
+  const nodeBin = provided?.nodeBin ?? join(nodeRoot, 'bin/node'),
+    pnpm = provided?.pnpm ?? join(pnpmRoot, 'package/bin/pnpm.cjs');
   const baseEnv = { ...environment(), PATH: '/usr/bin:/bin' };
   async function ensure(
     destination: string,
@@ -148,13 +187,24 @@ async function prepare(signal?: AbortSignal) {
       await rm(stage, { recursive: true, force: true });
     }
   }
-  await ensure(nodeRoot, nodeBin, node.url, node.sha256, node.directory);
-  await ensure(pnpmRoot, pnpm, pins.pnpm.url, pins.pnpm.integrity, 'package');
-  const bin = join(root, `bin-${selected.version}-${pins.pnpm.version}-${platform}`);
+  if (!provided) {
+    await ensure(nodeRoot, nodeBin, node.url, node.sha256, node.directory);
+    await ensure(pnpmRoot, pnpm, pins.pnpm.url, pins.pnpm.integrity, 'package');
+  }
+  const bin = join(
+    root,
+    `bin-${selected.version}-${pins.pnpm.version}-${platform}${provided ? '-provided' : ''}`,
+  );
   await mkdir(bin, { recursive: true });
   const pnpmLink = join(bin, 'pnpm');
-  if (!(await lstat(pnpmLink).catch(() => null))) await symlink(pnpm, pnpmLink);
-  if (((await lstat(pnpm)).mode & 0o111) !== 0o111) await chmod(pnpm, 0o755);
+  let linked = await lstat(pnpmLink).catch(() => null);
+  // A provided toolchain can move (e.g. a new Nix store path); keep the link current.
+  if (linked && provided && (await readlink(pnpmLink).catch(() => undefined)) !== pnpm) {
+    await rm(pnpmLink, { force: true });
+    linked = null;
+  }
+  if (!linked) await symlink(pnpm, pnpmLink);
+  if (!provided && ((await lstat(pnpm)).mode & 0o111) !== 0o111) await chmod(pnpm, 0o755);
   const env = {
     ...environment(),
     PATH: `${dirname(nodeBin)}:${bin}:${process.env.PATH || '/usr/bin:/bin'}`,
@@ -166,7 +216,17 @@ async function prepare(signal?: AbortSignal) {
     (await command([nodeBin, '--version'], root, env, signal, true)).trim() !==
     `v${selected.version}`
   )
-    throw new AccountError('TOOLCHAIN_VERSION', 'Unexpected cached Node version.');
+    throw provided
+      ? new DiagnosticError(
+          'TOOLCHAIN_VERSION',
+          `The provided Node runtime is not the pinned v${selected.version}.`,
+          {
+            operation: 'check provided project toolchain',
+            target: nodeBin,
+            recovery: `Point SOYLI_NODE at Node v${selected.version}, or unset SOYLI_NODE and SOYLI_PNPM to use the managed toolchain.`,
+          },
+        )
+      : new AccountError('TOOLCHAIN_VERSION', 'Unexpected cached Node version.');
   return { nodeBin, pnpm, env };
 }
 

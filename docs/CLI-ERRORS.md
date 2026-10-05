@@ -135,6 +135,8 @@ local HTTP error responses retain their `error` text and add a `diagnostic` obje
   failures retain sanitized curl/tar output and exit status. Doctor reports an
   unavailable release check alongside local diagnostics. `soyli update --json`
   keeps installer progress on stderr and emits one structured result/error.
+  A package-manager build (`--distribution nix`) refuses with `UPDATE_INSTALLATION`,
+  naming that package manager in the recovery instead of the GitHub installer.
 - **Git:** startup, exit status, bounded stdout/stderr, timeout and output-limit errors.
   Failed source alternatives retain their causes when no source succeeds.
   Proposal inbox confirmation includes failed Git ref pushes, and Git execution
@@ -142,6 +144,9 @@ local HTTP error responses retain their `error` text and add a `diagnostic` obje
 - **Project tools:** setup, build and other wrapped commands retain a sanitized
   output tail. Vite watcher failures include their output and exit status when
   available. Toolchain downloads identify their destination and HTTP failure.
+  A packager-provided toolchain reports `TOOLCHAIN_PROVIDED` for an incomplete or
+  missing `SOYLI_NODE`/`SOYLI_PNPM` pair and `TOOLCHAIN_VERSION` with the Node path
+  when it is not the pinned version.
 - **Relay build/test runner:** Go dependency and build/test failures preserve
   sanitized tool output, operation, exit status, relay directory and recovery
   command. Test failures are no longer mislabeled as missing build prerequisites.

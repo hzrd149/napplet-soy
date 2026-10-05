@@ -11,7 +11,7 @@ import { checkPublication } from './publish-check';
 import { previewAssets } from './preview/assets';
 import { startPreviewServer } from './preview/server';
 import { gitAvailable } from './prerequisites';
-import { version } from './distribution';
+import { hostEnvironment, version } from './distribution';
 import { releaseCheck } from './update';
 import { watchProject } from './toolchain';
 import { rustToolchainStatus } from './rust-build';
@@ -123,6 +123,7 @@ export async function preview(
       const executable = Bun.which(process.platform === 'darwin' ? 'open' : 'xdg-open');
       if (executable) {
         const child = Bun.spawn([executable, server.url.href], {
+          env: hostEnvironment(),
           stdin: 'ignore',
           stdout: 'ignore',
           stderr: 'ignore',
