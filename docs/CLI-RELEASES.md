@@ -1,7 +1,23 @@
 # soyLI releases and updates
 
 GitHub Releases distribute the standalone CLI independently of the website/VPS.
-The current published version is **0.24.0**.
+The current published version is **0.24.1**.
+
+**0.24.1 published 2026-10-05 (Europe/Vienna):**
+[GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.24.1),
+source `2a8733af7fe14f6179a6d034db56ece351ac9f2e`.
+[Workflow 37292441710](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37292441710)
+passed the source gate, all four native jobs and release publication.
+
+A migration preview now creates its private plan parent when no account has ever
+been configured. Previously that fresh-install case failed with `ENOENT` before
+planning. The correction generates no key, selects no identity and signs/posts
+nothing; original-author selection and confirmation remain required for publication.
+The real entrypoint regression was red before the correction and passes afterward,
+including the compiled macOS ARM64 binary (31 assertions). TypeScript and all 545
+source tests pass (4,425 assertions). A completely fresh compiled CLI also verifies
+the actual public napplet's 1,063,318-byte HTML and prepares its conversion without
+account setup or signing. All other 0.24.0 migration/compatibility behavior remains.
 
 **0.24.0 published 2026-10-05 (Europe/Vienna):**
 [GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.24.0),

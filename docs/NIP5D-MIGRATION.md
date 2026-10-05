@@ -98,6 +98,15 @@ installer/download references are advanced only after those public packages exis
 Existing signed napplets and user-project histories are retained. External-client
 support for the new shape remains a separate qualification.
 
+The clean-install migration-preview correction is included in
+[soyLI 0.24.1](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.24.1),
+source `2a8733af7fe14f6179a6d034db56ece351ac9f2e`.
+[Workflow 37292441710](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37292441710)
+passed all four native platforms and release publication. Previewing before account
+setup creates only its private plan directory; original-author confirmation and
+selection remain mandatory for signing. The compiled CLI's account-free preview
+also verifies the affected napplet's actual published HTML.
+
 ## Dedicated author migration
 
 soyLI 0.24.0 adds the opt-in `migrate <link> --dry-run` / `--confirm` / `--resume`
