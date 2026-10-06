@@ -6,7 +6,12 @@ import type { Network, SignerOptions } from '../../../packages/identity/src/sign
 import { DiagnosticError } from '../../../packages/diagnostics/src';
 import { regularFile } from '../../../packages/publish/src/project';
 import { committedSource } from '../../../packages/publish/src/git-source';
-import { projectIdentity, resolveTargets } from '../../../packages/publish/src/config';
+import {
+  projectIdentity,
+  projectRepositoryReference,
+  resolveTargets,
+} from '../../../packages/publish/src/config';
+import { selectRepository } from '../../../packages/publish/src/repository';
 import { sourceUrls } from '../../../packages/grasp/src/client';
 import { CvmConnection } from '../../../packages/multiplayer/src/client';
 import {
@@ -127,6 +132,28 @@ export async function moduleCommand(
     throw new Error(
       'Add backend: { boards: [], modules: ["backend/backend.json"] } to napplet.json first.',
     );
+  // Linked frontend source support does not yet extend to the backend build path.
+  // Refuse before a remote build or authorization instead of requesting a missing
+  // generated repository and reporting its misleading HTTP 404.
+  if (action === 'deploy') {
+    const linked = await selectRepository({
+      directory,
+      pubkey: account.pubkey,
+      configured: projectRepositoryReference(prepared.project, network),
+      signal: signerOptions.signal,
+    });
+    if (linked)
+      throw new DiagnosticError(
+        'BACKEND_SOURCE_LINKED',
+        'Backend deployment from an existing NIP-34 repository is not supported yet.',
+        {
+          operation: 'select backend source',
+          target: linked.address,
+          recovery:
+            'Keep your account and repository. Use soyli dev for local backend previews; remote deployment currently requires a project with soyLI-managed GRASP source. No build or authorization was sent.',
+        },
+      );
+  }
   const provider = await resolveBackendProvider(directory, network),
     transport = new PrivateKeySigner(),
     actor = await transport.getPublicKey();

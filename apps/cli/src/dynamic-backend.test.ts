@@ -1,8 +1,9 @@
 import { test, expect } from 'bun:test';
-import { mkdtemp, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
-import { generateSecretKey, getPublicKey, finalizeEvent } from 'nostr-tools';
+import { generateSecretKey, getPublicKey, finalizeEvent, nip19 } from 'nostr-tools';
+import { sourceGit } from '../../../packages/grasp/src/client';
 import { PrivateKeySigner } from '@contextvm/sdk/signer';
 import { CvmConnection } from '../../../packages/multiplayer/src/client';
 import { BackendAccount } from '../../../packages/runtime/src/backend-account';
@@ -243,3 +244,69 @@ test('soyLI local preview reaches dynamic tools over encrypted CVM with host-sco
     await rm(root, { recursive: true, force: true });
   }
 }, 25000);
+
+test('real CLI explains linked backend source before connecting to a provider or asking for authorization', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'soy-backend-linked-source-'));
+  const project = join(root, 'project');
+  await mkdir(project);
+  const env = {
+    PATH: process.env.PATH,
+    HOME: root,
+    SPACE_ACCOUNT_HOME: join(root, 'accounts'),
+    SOYLI_DANGEROUS_PLAINTEXT_KEYS: '1',
+  };
+  const run = async (args: string[]) => {
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        entry,
+        ...args,
+        '--network',
+        'local',
+        ...(args[0] === 'backend' ? ['--project', project] : []),
+        '--json',
+      ],
+      { cwd: root, env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' },
+    );
+    const [out, err, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    return { out, err, code };
+  };
+  try {
+    const created = await run(['account', 'create']);
+    expect(created.code, created.out + created.err).toBe(0);
+    const { account } = JSON.parse(created.out);
+    await initModule(project);
+    await Bun.write(
+      join(project, 'napplet.json'),
+      JSON.stringify({
+        schema: 'space-local-project/v1',
+        name: 'Linked backend',
+        entry: 'index.html',
+        previewId: crypto.randomUUID(),
+        identifier: 'world',
+        license: 'MIT',
+        backend: { boards: [], modules: ['backend/backend.json'] },
+      }),
+    );
+    await sourceGit(project, ['init']);
+    await sourceGit(project, [
+      'remote',
+      'add',
+      'origin',
+      `nostr://${nip19.npubEncode(account.pubkey)}/${encodeURIComponent('ws://127.0.0.1:1/')}/world`,
+    ]);
+    const result = await run(['backend', 'deploy', 'backend/backend.json']);
+    expect(result.code).not.toBe(0);
+    const diagnostic = JSON.parse(result.out || result.err).error;
+    expect(diagnostic.code).toBe('BACKEND_SOURCE_LINKED');
+    expect(diagnostic.operation).toBe('select backend source');
+    expect(diagnostic.recovery).toContain('No build or authorization was sent');
+    expect(result.out + result.err).not.toContain('KEYSTORE');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 15000);

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { finalizeEvent, getPublicKey, matchFilters, nip19 } from 'nostr-tools';
 import { CommunityStore } from '../../community/src/store';
-import { ProfileService } from './profiles';
+import { ProfileService, profileRelays } from './profiles';
 import {
   editableProfile,
   latestProfile,
@@ -87,6 +87,54 @@ test('kind-0 selection verifies signatures and tie order, without reviving older
       }),
     ),
   ).toMatchObject({ picture: null, website: null, about: '<script>x</script>' });
+});
+test('profile refresh includes the seventh and eighth configured relays and selects the latest signed metadata', async () => {
+  const older = event({ name: 'Seventh relay' });
+  const newest = event(
+    { name: 'Eighth relay', picture: 'https://images.example/avatar.png' },
+    older.created_at + 1,
+  );
+  const requests = new Set<string>();
+  const relay = Bun.serve<{ path: string }>({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch(request, server) {
+      return server.upgrade(request, { data: { path: new URL(request.url).pathname } })
+        ? undefined
+        : new Response('', { status: 400 });
+    },
+    websocket: {
+      message(socket, raw) {
+        const message = JSON.parse(String(raw));
+        if (message[0] !== 'REQ') return;
+        requests.add(socket.data.path);
+        const profile =
+          socket.data.path === '/7' ? older : socket.data.path === '/8' ? newest : null;
+        if (profile && matchFilters(message.slice(2), profile))
+          socket.send(JSON.stringify(['EVENT', message[1], profile]));
+        socket.send(JSON.stringify(['EOSE', message[1]]));
+      },
+    },
+  });
+  const previous = process.env.SPACE_INDEX_RELAYS;
+  try {
+    const urls = Array.from(
+      { length: 8 },
+      (_, index) => `ws://127.0.0.1:${relay.port}/${index + 1}`,
+    );
+    process.env.SPACE_INDEX_RELAYS = urls.join(',');
+    expect(await profileRelays()).toEqual(urls);
+    const { store } = await setup();
+    const service = new ProfileService(store);
+    const result = await service.read([pubkey], await profileRelays());
+    expect(result.warning).toBeNull();
+    expect(result.profiles[0]).toMatchObject({ name: 'Eighth relay', eventId: newest.id });
+    expect([...requests].sort()).toEqual(['/1', '/2', '/3', '/4', '/5', '/6', '/7', '/8']);
+  } finally {
+    if (previous === undefined) delete process.env.SPACE_INDEX_RELAYS;
+    else process.env.SPACE_INDEX_RELAYS = previous;
+    relay.stop(true);
+  }
 });
 test('profile reads are cached, signed edits preserve unknown fields/tags and require relay acceptance', async () => {
   const original = event(

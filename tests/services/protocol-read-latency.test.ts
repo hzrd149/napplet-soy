@@ -10,7 +10,7 @@ import { sha256 } from '../../packages/protocol/src';
 import { freezeFixture } from '../../packages/publish/src/testing';
 import fixtures from '../../packages/backend/data/catalog.json';
 
-test.each(['proposals', 'source', 'profile', 'empty proposals'])(
+test.each(['proposals', 'source', 'profile', 'default profile', 'empty proposals'])(
   '%s renders useful relay data without serial stalled-relay deadlines',
   async (scenario) => {
     const directory = await mkdtemp(join(tmpdir(), 'protocol-read-latency-'));
@@ -46,7 +46,11 @@ test.each(['proposals', 'source', 'profile', 'empty proposals'])(
       'A useful proposal.',
     );
     const status = sign(1631, [['e', proposal.id, '', 'root']], 'Merged', now + 1);
-    const profile = sign(0, [], JSON.stringify({ name: 'Quick Creator' }));
+    const profile = sign(
+      0,
+      [],
+      JSON.stringify({ name: 'Quick Creator', picture: 'https://images.example/creator.png' }),
+    );
     const manifest = finalizeEvent(
       {
         ...fixtures[0].current,
@@ -96,16 +100,17 @@ test.each(['proposals', 'source', 'profile', 'empty proposals'])(
       }
       expect(origin).not.toBe('');
       const page = await browser.newPage();
-      await page.addInitScript(() =>
-        localStorage.setItem(
-          'napplet:network',
-          JSON.stringify({
-            relays: ['wss://fast.example', 'wss://stalled.example'],
-            blossom: [],
-          }),
-        ),
-      );
-      if (scenario === 'empty proposals')
+      if (scenario !== 'default profile')
+        await page.addInitScript(() =>
+          localStorage.setItem(
+            'napplet:network',
+            JSON.stringify({
+              relays: ['wss://fast.example', 'wss://stalled.example'],
+              blossom: [],
+            }),
+          ),
+        );
+      if (scenario === 'empty proposals' || scenario === 'default profile')
         await page.addInitScript((pubkey) => {
           (window as any).nostr = {
             getPublicKey: async () => pubkey,
@@ -120,11 +125,32 @@ test.each(['proposals', 'source', 'profile', 'empty proposals'])(
           headers: { 'access-control-allow-origin': '*' },
         }),
       );
+      await page.route('https://images.example/creator.png', (route) =>
+        route.fulfill({
+          body: Buffer.from(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jA1kAAAAASUVORK5CYII=',
+            'base64',
+          ),
+          contentType: 'image/png',
+        }),
+      );
       let proposalRootReads = 0;
       await page.routeWebSocket(/wss?:\/\//, (route) =>
         route.onMessage((raw) => {
           const m = JSON.parse(String(raw));
-          if (m[0] !== 'REQ' || !route.url().includes('fast.example')) return;
+          if (m[0] !== 'REQ') return;
+          // The reported profile is absent from the old defaults. Only an
+          // additional general-purpose default has it; the rest complete empty
+          // or stall. No saved browser network override can hide this regression.
+          if (scenario === 'default profile') {
+            if (route.url().includes('relay.nos.social')) {
+              if (matchFilters(m.slice(2), profile))
+                route.send(JSON.stringify(['EVENT', m[1], profile]));
+            } else if (route.url().includes('relay.primal.net')) return;
+            route.send(JSON.stringify(['EOSE', m[1]]));
+            return;
+          }
+          if (!route.url().includes('fast.example')) return;
           if (m.slice(2).some((f: any) => f.kinds?.includes(1618))) proposalRootReads++;
           for (const event of events)
             if (matchFilters(m.slice(2), event)) route.send(JSON.stringify(['EVENT', m[1], event]));
@@ -165,6 +191,21 @@ test.each(['proposals', 'source', 'profile', 'empty proposals'])(
         await ui(
           page.locator('.napplet-card').first().getByText('Quick Creator', { exact: true }),
         ).toBeVisible({ timeout: 1500 });
+      } else if (scenario === 'default profile') {
+        const creator = page.locator('.detail-heading .nostr-creator');
+        await ui(creator).toContainText('Quick Creator', { timeout: 1500 });
+        await ui(creator.locator('img')).toHaveAttribute(
+          'src',
+          'https://images.example/creator.png',
+        );
+        await page.getByRole('button', { name: 'Connect', exact: true }).click();
+        await page.getByRole('button', { name: 'Extension', exact: true }).click();
+        await page.getByRole('button', { name: 'Connect browser extension', exact: true }).click();
+        await ui(page.locator('#identity-button')).toContainText('Quick Creator');
+        await ui(page.locator('#identity-button img')).toHaveAttribute(
+          'src',
+          'https://images.example/creator.png',
+        );
       } else {
         await ui(page.getByRole('link', { name: 'Browse source', exact: true })).toBeVisible();
         const navigation = performance.now();

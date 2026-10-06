@@ -24,7 +24,7 @@ export async function profileRelays() {
       ...(status.index.relays ?? []),
       ...status.relays,
     ]),
-  ].slice(0, 6);
+  ].slice(0, 8);
 }
 export function visibleProfile(pubkey: string) {
   if (blocked('pubkey', pubkey)) throw new CommunityError('This profile is unavailable here.', 404);

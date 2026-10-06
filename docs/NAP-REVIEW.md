@@ -1,5 +1,23 @@
 # NAP concepts and expansion review
 
+## NIP-22 comment audit — 2026-10-05
+
+Reviewed the official [NIP-22 at 13664fb](https://github.com/nostr-protocol/nips/blob/13664fb18a3ce5fa48a849de012ab789d82eb254/22.md).
+Napplet and proposal writers use kind 1111, plaintext content, uppercase root scope
+and lowercase parent references, with the required kind and author tags. Named/root
+napplets retain their address across replies; independent snapshots use their own
+event. Proposal roots are immutable kind-1617/1618 events, so event references are
+appropriate there. No NIP-5D or dependency pin changes are needed.
+
+The audit reproduced a reader interoperability defect: an exactly-one-`p` check
+rejected comments containing additional profile mentions, which NIP-22 recommends
+tagging. The source correction accepts those mentions while requiring the referenced
+parent's author and preserving thread isolation. Existing import tolerance for absent
+uppercase `P` remains; writers always emit it. Signed regressions and the related
+social/gallery/proposal suites pass 25 tests/233 assertions, plus TypeScript.
+Implemented, verified and deployed on 2026-10-06 in `20261006111729495-77355`,
+with soyLI 0.24.2. The selected NIP-5D authority and dependency pins remain unchanged.
+
 ## NIP-5D standalone manifest migration — 2026-10-04
 
 Selected authority: [dskvr/nips PR 7](https://github.com/dskvr/nips/pull/7), head `4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51` (open when initially reviewed; confirmed merged at the same head on 2026-10-05). New writer and explicit dual reader use the same unchanged kinds. New `x` is raw HTML SHA-256; description is plain-text content; `R`/`O`, `icon`, `z` and `i` are supported. Snapshot ancestry is optional provenance, never own-app identity. Legacy `24711d9` readers remain for existing publications.

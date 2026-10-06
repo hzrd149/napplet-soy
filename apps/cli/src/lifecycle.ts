@@ -112,6 +112,9 @@ export async function lifecycleCommand(options: {
           ),
           metadata: jobs.flatMap((j) => (j.preview?.descriptor ? [j.preview.descriptor] : [])),
           extraBlobs,
+          retainedRepositories: jobs.flatMap((job) =>
+            job.repository ? [job.repository.address] : [],
+          ),
           relays: [last.plan.targets.relay, ...last.plan.targets.mirrors],
           local: options.network === 'local',
           io: transport,
