@@ -29,11 +29,17 @@ test('the Node metadata worker accepts a bounded job and refuses private relay d
     },
     key,
   );
-  expect(await workerMetadata([manifest], [], AbortSignal.timeout(5000))).toEqual([]);
+  // localhost exercises connection-time DNS policy and may consume the relay's
+  // 3 s query window. Include cold bundling/Node startup and leave cleanup time
+  // before Bun's test deadline; equal deadlines let Bun kill the child first.
+  const signal = AbortSignal.timeout(10000);
+  expect(await workerMetadata([manifest], [], signal)).toEqual([]);
+  // A cancellation fallback must not make a hung worker look like a rejection.
+  expect(signal.aborted).toBe(false);
   const controller = new AbortController();
   controller.abort();
   expect(await workerMetadata([manifest], [], controller.signal)).toEqual([]);
-});
+}, 15000);
 
 test('Applesauce resolves exact linked descriptors and profile fallback, rejecting unrelated and forged events', async () => {
   const key = new Uint8Array(32);
