@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { mkdtemp, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { generateSecretKey, getPublicKey, finalizeEvent, nip19 } from 'nostr-tools';
@@ -247,6 +247,8 @@ test('soyLI local preview reaches dynamic tools over encrypted CVM with host-sco
 
 test('real CLI explains linked backend source before connecting to a provider or asking for authorization', async () => {
   const root = await mkdtemp(join(tmpdir(), 'soy-backend-linked-source-'));
+  const project = join(root, 'project');
+  await mkdir(project);
   const env = {
     PATH: process.env.PATH,
     HOME: root,
@@ -261,7 +263,7 @@ test('real CLI explains linked backend source before connecting to a provider or
         ...args,
         '--network',
         'local',
-        ...(args[0] === 'backend' ? ['--project', root] : []),
+        ...(args[0] === 'backend' ? ['--project', project] : []),
         '--json',
       ],
       { cwd: root, env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' },
@@ -277,9 +279,9 @@ test('real CLI explains linked backend source before connecting to a provider or
     const created = await run(['account', 'create']);
     expect(created.code, created.out + created.err).toBe(0);
     const { account } = JSON.parse(created.out);
-    await initModule(root);
+    await initModule(project);
     await Bun.write(
-      join(root, 'napplet.json'),
+      join(project, 'napplet.json'),
       JSON.stringify({
         schema: 'space-local-project/v1',
         name: 'Linked backend',
@@ -290,8 +292,8 @@ test('real CLI explains linked backend source before connecting to a provider or
         backend: { boards: [], modules: ['backend/backend.json'] },
       }),
     );
-    await sourceGit(root, ['init']);
-    await sourceGit(root, [
+    await sourceGit(project, ['init']);
+    await sourceGit(project, [
       'remote',
       'add',
       'origin',
