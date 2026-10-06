@@ -134,3 +134,14 @@ snapshots remain published. The real CLI test uses isolated Khatru, Blossom and 
 pinned native GRASP. A browser test covers mobile confirmation, progress, reload
 recovery and republishing through an extension signer. No real user publications
 are deleted by these tests.
+
+### Linked source repositories
+
+Deleting a napplet retains a creator-owned repository selected with
+`publish.repository` or an owned `nostr://` remote, even when the repository and
+napplet identifiers match. New linked publications carry the optional signed
+`soy-source-repository` retention policy; the CLI also uses its local publication
+journal for previously signed releases. The review inventory labels these
+repositories as retained. A former soyLI-hosted copy at a different address can
+still be included for deletion unless another napplet uses it. This cleanup
+metadata is not required for discovery or playback.

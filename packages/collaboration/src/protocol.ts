@@ -1,5 +1,6 @@
 import { nip19 } from 'nostr-tools';
 import { z } from 'zod';
+import { DiagnosticError } from '../../diagnostics/src';
 import { verifiedEvent, sha256, type SignedEvent } from '../../protocol/src';
 import { validateManifest } from '../../protocol/src/manifest';
 import type { ProtocolClient } from '../../client/src/nostr';
@@ -34,6 +35,83 @@ export function repositoryRef(reference: string) {
   const match = /^30617:([a-f0-9]{64}):([^\u0000-\u001f]{1,256})$/.exec(ref);
   if (!match) throw new Error('Use a NIP-34 repository address or nostr:// clone URL.');
   return { address: ref, pubkey: match[1], identifier: match[2], relays };
+}
+const nip05Pattern = /^(?:([a-z0-9._-]{1,64})@)?((?:[a-z0-9-]{1,63}\.)+[a-z]{2,63})$/i;
+/** ngit remote URLs may name the owner by NIP-05 and carry a transport hint:
+ * nostr://[protocol/]<npub|nip05>[/<relay>]/<identifier>. */
+export async function resolveRepositoryRef(
+  reference: string,
+  options: { fetch?: typeof fetch; signal?: AbortSignal } = {},
+) {
+  if (!reference.startsWith('nostr://')) return repositoryRef(reference);
+  let parts = reference.slice('nostr://'.length).split('/');
+  if (parts.length > 2 && ['ssh', 'https', 'http', 'git'].includes(parts[0].toLowerCase()))
+    parts = parts.slice(1);
+  const owner = decodeURIComponent(parts[0] ?? '');
+  const nip05 = nip05Pattern.exec(owner);
+  if (!nip05 || ![2, 3].includes(parts.length)) return repositoryRef(`nostr://${parts.join('/')}`);
+  const [name, domain] = [(nip05[1] ?? '_').toLowerCase(), nip05[2].toLowerCase()];
+  const target = `https://${domain}/.well-known/nostr.json?name=${encodeURIComponent(name)}`;
+  let pubkey: unknown;
+  try {
+    const response = await (options.fetch ?? fetch)(target, {
+      redirect: 'error',
+      credentials: 'omit',
+      signal: options.signal
+        ? AbortSignal.any([options.signal, AbortSignal.timeout(8000)])
+        : AbortSignal.timeout(8000),
+    });
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new DiagnosticError('NIP05_STATUS', 'NIP-05 lookup returned an error status.', {
+        status: response.status,
+      });
+    }
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('NIP-05 document is empty.');
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > 64 * 1024) throw new Error('NIP-05 document exceeds 64 KiB.');
+        chunks.push(value);
+      }
+    } finally {
+      await reader.cancel();
+      reader.releaseLock();
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    pubkey = (JSON.parse(new TextDecoder().decode(bytes)) as { names?: Record<string, unknown> })
+      .names?.[name];
+  } catch (cause) {
+    throw new DiagnosticError('REPOSITORY_OWNER_LOOKUP', `Could not resolve ${name}@${domain}.`, {
+      operation: 'resolve repository owner',
+      target,
+      cause,
+      recovery:
+        'Retry when the NIP-05 host is reachable, or set publish.repository in napplet.json to the repository naddr1… address, which needs no lookup.',
+    });
+  }
+  if (typeof pubkey !== 'string' || !/^[a-f0-9]{64}$/.test(pubkey))
+    throw new DiagnosticError(
+      'REPOSITORY_OWNER_LOOKUP',
+      `${name}@${domain} does not publish a Nostr public key.`,
+      {
+        operation: 'resolve repository owner',
+        target,
+        recovery:
+          'Check the remote URL, or set publish.repository in napplet.json to the repository naddr1… address.',
+      },
+    );
+  return repositoryRef(`nostr://${[nip19.npubEncode(pubkey), ...parts.slice(1)].join('/')}`);
 }
 export function proposalId(value: string) {
   value = value.replace(/^nostr:/, '');

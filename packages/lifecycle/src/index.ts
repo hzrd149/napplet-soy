@@ -126,6 +126,8 @@ export async function planLifecycle(input: {
   snapshotPairs?: { current: SignedEvent; snapshot: SignedEvent }[];
   metadata?: SignedEvent[];
   extraBlobs?: { origin: string; hash: string; label: string }[];
+  /** Linked repositories recorded in the local publication journal: retain only. */
+  retainedRepositories?: string[];
 }): Promise<LifecyclePlan> {
   await validateManifest(input.manifest);
   const manifest = verifiedEvent(input.manifest),
@@ -382,6 +384,16 @@ export async function planLifecycle(input: {
           return false;
         }
       });
+      // A matching name is not evidence that soyLI created the repository. The
+      // author's signed linked-source policy (or local journal) takes precedence.
+      const linked =
+        ref.identifier !== key.split(':').slice(2).join(':') ||
+        input.retainedRepositories?.includes(ref.address) ||
+        manifests.some((m) =>
+          m.tags.some(
+            (t) => t[0] === 'soy-source-repository' && t[1] === ref.address && t[2] === 'linked',
+          ),
+        );
       for (const r of ref.relays) {
         const relay = lifecycleEndpoint(r, 'relay', input.local);
         const announcements = await read(relay, {
@@ -398,7 +410,11 @@ export async function planLifecycle(input: {
           address: ref.address,
           relay,
           clone,
-          ...(shared ? { retained: 'Used by another napplet from this author.' } : {}),
+          ...(shared
+            ? { retained: 'Used by another napplet from this author.' }
+            : linked
+              ? { retained: 'Your own source repository is kept; soyLI did not create it.' }
+              : {}),
         });
       }
       if (!ref.relays.length)

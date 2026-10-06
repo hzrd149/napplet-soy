@@ -32,6 +32,14 @@ import { ownedBlobs, verifiedBlob } from './blobs';
 import { confirmWebsite } from './website';
 import { executableBytes } from './artifact';
 import { committedSource, inspectHistory, SourceHistoryError } from './git-source';
+import { repositoryRef } from '../../collaboration/src/protocol';
+import {
+  loadRepository,
+  RepositoryError,
+  selectRepository,
+  verifyReleaseReachable,
+  type SelectedRepository,
+} from './repository';
 
 export { PublishError } from './config';
 type RelayOperations = Pick<PublicationRelays, 'latest' | 'ensure' | 'close'> &
@@ -45,6 +53,9 @@ type Dependencies = {
   // A checkpoint hook supports deterministic crash tests without production flags.
   checkpoint?: (job: PublishJob) => Promise<void>;
   website?: typeof confirmWebsite;
+  // NIP-05 owner lookup and Git ref listing for the creator's own repository.
+  fetch?: typeof fetch;
+  lsRemote?: Parameters<typeof verifyReleaseReachable>[0]['lsRemote'];
 };
 export type PublishOptions = {
   directory: string;
@@ -60,7 +71,7 @@ export type PublishOptions = {
   signal?: AbortSignal;
   onAuth?: (url: string) => Promise<void>;
   progress?: (stage: string) => void;
-  summary?: (plan: PublishPlan) => void;
+  summary?: (plan: PublishPlan, repository: SelectedRepository | null) => void;
   dependencies?: Dependencies;
 };
 function result(job: PublishJob, unchanged = false) {
@@ -78,6 +89,9 @@ function result(job: PublishJob, unchanged = false) {
     identifier: job.plan.identifier,
     sourceCommit: job.commit,
     sourceArchive: `${job.plan.targets.blossom}/${job.archiveHash}`,
+    sourceRepository: job.repository
+      ? { address: job.repository.address, origin: job.repository.origin, hosted: false }
+      : { address: null, origin: job.plan.targets.grasp, hosted: true },
     artifactHash: job.plan.artifactHash,
     naddr,
     snapshotId: job.snapshot?.id ?? null,
@@ -224,12 +238,19 @@ export async function publishProject(options: PublishOptions) {
         'PUBLISH_OPTIONS',
         'Use status to inspect a saved publication; dry-run checks the current source.',
       );
-    const { plan, fingerprint } = await inspectProject(
+    const { plan, fingerprint, repository } = await inspectProject(
       options.directory,
       options.network,
       account.pubkey,
       options.targets,
     );
+    const selected = await selectRepository({
+      directory: options.directory,
+      pubkey: account.pubkey,
+      configured: repository,
+      fetch: options.dependencies?.fetch,
+      signal: options.signal,
+    });
     const sourceHistory =
       plan.sourceCommit === '0'.repeat(40)
         ? { status: 'uncommitted' as const }
@@ -241,6 +262,9 @@ export async function publishProject(options: PublishOptions) {
       status: 'dry_run' as const,
       fingerprint,
       plan,
+      sourceRepository: selected
+        ? { address: selected.address, origin: selected.origin, hosted: false }
+        : { address: null, origin: plan.targets.grasp, hosted: true },
       sourceHistory,
       checksPending: [
         ...(sourceHistory.status === 'uncommitted'
@@ -249,6 +273,7 @@ export async function publishProject(options: PublishOptions) {
         'sandbox startup and preview capture',
         'remote current version',
         'Git/Blossom/relay availability',
+        ...(selected ? ['release commit pushed to your repository'] : []),
       ],
     };
   }
@@ -256,6 +281,9 @@ export async function publishProject(options: PublishOptions) {
   const journal = new Journal(root, options.network, account.pubkey);
   const deps = options.dependencies ?? {};
   const relays = deps.relays ?? new PublicationRelays(options.signal);
+  const local = options.network === 'local';
+  const latest = (url: string, pubkey: string, identifier: string, kind: number) =>
+    relays.latest(url, pubkey, identifier, kind);
   let signer: CreatorSigner | undefined,
     stage = 'check';
   const progress = (next: string) => {
@@ -339,6 +367,13 @@ export async function publishProject(options: PublishOptions) {
           );
           // Fail before remote lookups/sandbox startup; freeze repeats against its exact commit.
           await inspectHistory(root, inspected.plan.sourceCommit);
+          const selected = await selectRepository({
+            directory: root,
+            pubkey: account.pubkey,
+            configured: inspected.repository,
+            fetch: deps.fetch,
+            signal: options.signal,
+          });
           if (job && job.fingerprint !== inspected.fingerprint)
             throw new PublishError(
               'PUBLISH_PENDING',
@@ -349,6 +384,7 @@ export async function publishProject(options: PublishOptions) {
             previous?.fingerprint === inspected.fingerprint &&
             !retired &&
             !refreshedInShell &&
+            (previous.repository?.address ?? null) === (selected?.address ?? null) &&
             (!options.requirePreview || previous.preview)
           )
             job = previous;
@@ -358,7 +394,11 @@ export async function publishProject(options: PublishOptions) {
                 previous.plan.pubkey !== account.pubkey ||
                 previous.plan.identifier !== inspected.plan.identifier ||
                 previous.plan.targets.relay !== inspected.plan.targets.relay ||
-                previous.plan.targets.grasp !== inspected.plan.targets.grasp
+                // The Git host names soyLI's hosted repository. Moving to or between the
+                // creator's own repositories does not rewrite it.
+                (!previous.repository &&
+                  !selected &&
+                  previous.plan.targets.grasp !== inspected.plan.targets.grasp)
               )
                 throw new PublishError(
                   'PUBLISH_IDENTITY',
@@ -367,7 +407,7 @@ export async function publishProject(options: PublishOptions) {
               await verifyFrozen(journal, previous);
             }
             const plan = inspected.plan;
-            options.summary?.(plan);
+            options.summary?.(plan, selected);
             const source = sourceUrls(
               plan.targets.grasp,
               account.pubkey,
@@ -375,10 +415,25 @@ export async function publishProject(options: PublishOptions) {
               options.network === 'local',
             );
             progress('check');
+            // The creator's own repository is verified, not written: no hosted source events.
+            const linked = selected
+              ? await loadRepository(latest, selected, local, [
+                  plan.targets.relay,
+                  ...plan.targets.mirrors,
+                ])
+              : null;
+            if (linked)
+              await verifyReleaseReachable({
+                directory: root,
+                repository: linked.repository,
+                state: linked.state,
+                commit: plan.sourceCommit,
+                lsRemote: deps.lsRemote,
+              });
             const [current, sourceState, announcement] = await Promise.all([
               relays.latest(plan.targets.relay, account.pubkey, plan.identifier, 35129),
-              relays.latest(source.relay, account.pubkey, plan.identifier, 30618),
-              relays.latest(source.relay, account.pubkey, plan.identifier, 30617),
+              linked ? null : relays.latest(source.relay, account.pubkey, plan.identifier, 30618),
+              linked ? null : relays.latest(source.relay, account.pubkey, plan.identifier, 30617),
             ]);
             if (
               (current?.id ?? null) !== (previous?.current?.id ?? null) &&
@@ -481,15 +536,17 @@ export async function publishProject(options: PublishOptions) {
               await rm(path, { force: true });
               await durableFile(path, video);
             }
-            const releaseRefs = {
-              ...Object.fromEntries(
-                (sourceState?.tags ?? [])
-                  .filter((t) => /^refs\/tags\/release-[a-f0-9]{16}$/.test(t[0]))
-                  .map((t) => [t[0], t[1]]),
-              ),
-              ...previous?.releaseRefs,
-              [`refs/tags/release-${id.slice(0, 16)}`]: frozen.commit,
-            };
+            const releaseRefs: Record<string, string> = linked
+              ? {}
+              : {
+                  ...Object.fromEntries(
+                    (sourceState?.tags ?? [])
+                      .filter((t) => /^refs\/tags\/release-[a-f0-9]{16}$/.test(t[0]))
+                      .map((t) => [t[0], t[1]]),
+                  ),
+                  ...previous?.releaseRefs,
+                  [`refs/tags/release-${id.slice(0, 16)}`]: frozen.commit,
+                };
             if (Object.keys(releaseRefs).length > 128)
               throw new PublishError(
                 'RELEASE_LIMIT',
@@ -507,6 +564,17 @@ export async function publishProject(options: PublishOptions) {
               sourceBaseCommit,
               baseAnnouncement: announcement?.id ?? null,
               ...(announcement ? { repositoryAnnouncement: announcement } : {}),
+              ...(linked
+                ? {
+                    repository: {
+                      address: linked.repository.address,
+                      origin: linked.repository.origin,
+                      relays: linked.repository.relays,
+                      clones: linked.repository.clones,
+                      source: linked.repository.source,
+                    },
+                  }
+                : {}),
               ...frozen,
               check,
               ...(preview
@@ -568,8 +636,17 @@ export async function publishProject(options: PublishOptions) {
           );
           for (const [url, kind, base, own] of [
             [currentJob.plan.targets.relay, 35129, currentJob.baseCurrent, currentJob.current?.id],
-            [source.relay, 30618, currentJob.baseSource, currentJob.source?.state.id],
-            [source.relay, 30617, currentJob.baseAnnouncement, currentJob.source?.announcement.id],
+            ...(currentJob.repository
+              ? []
+              : ([
+                  [source.relay, 30618, currentJob.baseSource, currentJob.source?.state.id],
+                  [
+                    source.relay,
+                    30617,
+                    currentJob.baseAnnouncement,
+                    currentJob.source?.announcement.id,
+                  ],
+                ] as const)),
           ] as const) {
             const newest = await relays.latest(
               url,
@@ -594,23 +671,24 @@ export async function publishProject(options: PublishOptions) {
           );
         progress('sign');
         const directory = join(journal.directory(job.id), 'source');
-        job.source = await prepareSource({
-          directory,
-          identifier: job.plan.identifier,
-          title: job.plan.title,
-          origin: job.plan.targets.grasp,
-          local: options.network === 'local',
-          createdAt: job.createdAt,
-          releaseRefs: job.releaseRefs,
-          announcement: job.repositoryAnnouncement,
-          signer: job.source
-            ? {
-                getPublicKey: async () => job!.plan.pubkey,
-                signEvent: async (template) =>
-                  template.kind === 30617 ? job!.source!.announcement : job!.source!.state,
-              }
-            : signer!,
-        });
+        if (!job.repository)
+          job.source = await prepareSource({
+            directory,
+            identifier: job.plan.identifier,
+            title: job.plan.title,
+            origin: job.plan.targets.grasp,
+            local: options.network === 'local',
+            createdAt: job.createdAt,
+            releaseRefs: job.releaseRefs,
+            announcement: job.repositoryAnnouncement,
+            signer: job.source
+              ? {
+                  getPublicKey: async () => job!.plan.pubkey,
+                  signEvent: async (template) =>
+                    template.kind === 30617 ? job!.source!.announcement : job!.source!.state,
+                }
+              : signer!,
+          });
         if (!completed) await save();
         // A prepared legacy journal keeps its original wire shape, even if signing was
         // interrupted. Fresh jobs always use the standalone NIP-5D manifest.
@@ -656,13 +734,21 @@ export async function publishProject(options: PublishOptions) {
           ...job.plan.topics.map((t) => ['t', t]),
           [
             'source',
-            sourceUrls(
-              job.plan.targets.grasp,
-              account.pubkey,
-              job.plan.identifier,
-              options.network === 'local',
-            ).portable,
+            job.repository?.source ??
+              sourceUrls(
+                job.plan.targets.grasp,
+                account.pubkey,
+                job.plan.identifier,
+                options.network === 'local',
+              ).portable,
           ],
+          // A signed, optional cleanup policy protects an existing repository even
+          // when it happens to share the napplet identifier. It never gates playback.
+          ...(job.repository && !job.current && !job.snapshot
+            ? [['soy-source-repository', job.repository.address, 'linked']]
+            : ((job.current ?? job.snapshot)?.tags.filter(
+                (t) => t[0] === 'soy-source-repository',
+              ) ?? [])),
           ['source-commit', job.commit],
           ['source-archive', `${job.plan.targets.blossom}/${job.archiveHash}`],
         ];
@@ -708,7 +794,11 @@ export async function publishProject(options: PublishOptions) {
                     ]
                   : []),
                 ['license', job.plan.license],
-                ['repository', job.source.announcement.tags.find((tag) => tag[0] === 'clone')![1]],
+                [
+                  'repository',
+                  job.repository?.clones[0] ??
+                    job.source!.announcement.tags.find((tag) => tag[0] === 'clone')![1],
+                ],
                 [
                   'latest',
                   `35129:${account.pubkey}:${job.plan.identifier}`,
@@ -765,13 +855,28 @@ export async function publishProject(options: PublishOptions) {
         if (!completed) await save();
         await guard();
         progress('source');
-        await (deps.source ?? publishSource)({
-          directory,
-          origin: job.plan.targets.grasp,
-          local: options.network === 'local',
-          publication: job.source,
-          expectedCommit: job.sourceBaseCommit,
-        });
+        if (job.repository) {
+          // Recheck at this step so a resumed release cannot point at a commit that left the repository.
+          const linked = await loadRepository(
+            latest,
+            { ...repositoryRef(job.repository.address), ...job.repository },
+            local,
+          );
+          await verifyReleaseReachable({
+            directory: root,
+            repository: linked.repository,
+            state: linked.state,
+            commit: job.commit,
+            lsRemote: deps.lsRemote,
+          });
+        } else
+          await (deps.source ?? publishSource)({
+            directory,
+            origin: job.plan.targets.grasp,
+            local: options.network === 'local',
+            publication: job.source!,
+            expectedCommit: job.sourceBaseCommit,
+          });
         job.receipts.source = true;
         await save();
         progress('upload');
@@ -905,7 +1010,7 @@ export async function publishProject(options: PublishOptions) {
         if (error instanceof SourceHistoryError) throw error;
         const diagnostic = diagnose(error, `publish ${stage}`);
         const safe =
-          error instanceof PublishError
+          error instanceof PublishError || error instanceof RepositoryError
             ? error
             : new PublishError(
                 diagnostic.code === 'CLI_ERROR' ? 'PUBLISH_FAILED' : diagnostic.code,
@@ -939,7 +1044,8 @@ export async function publishProject(options: PublishOptions) {
             );
           }
         }
-        throw safe;
+        // Repository errors carry their own recovery; keep it at the diagnostic boundary.
+        throw error instanceof RepositoryError ? error : safe;
       }
     });
   } finally {

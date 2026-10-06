@@ -1,10 +1,13 @@
 import { test, expect } from 'bun:test';
 import { PrivateKeySigner } from 'applesauce-signers/signers/private-key-signer';
 import { aggregateHash, sha256 } from '../../protocol/src';
+import { nip19 } from 'nostr-tools';
+import { diagnose } from '../../diagnostics/src';
 import {
   observeProposals,
   proposalsFromEvents,
   repositoryRef,
+  resolveRepositoryRef,
   validatePreview,
   type Repository,
 } from './protocol';
@@ -138,3 +141,67 @@ for (const format of ['legacy', 'standalone'])
       ),
     ).rejects.toThrow('commit');
   });
+test('ngit NIP-05 repository URLs resolve their owner, relay hint and transport prefix', async () => {
+  const pubkey = await owner.getPublicKey();
+  const asked: string[] = [];
+  const fetch = (async (url: string) => {
+    asked.push(url);
+    return new Response(JSON.stringify({ names: { _: pubkey, alice: pubkey } }));
+  }) as unknown as typeof globalThis.fetch;
+  expect(
+    await resolveRepositoryRef('nostr://example.com/relay.example.com/My-Repo', { fetch }),
+  ).toEqual({
+    address: `30617:${pubkey}:My-Repo`,
+    pubkey,
+    identifier: 'My-Repo',
+    relays: ['wss://relay.example.com'],
+  });
+  expect((await resolveRepositoryRef('nostr://ssh/alice@Example.com/toy', { fetch })).address).toBe(
+    `30617:${pubkey}:toy`,
+  );
+  expect(asked).toEqual([
+    'https://example.com/.well-known/nostr.json?name=_',
+    'https://example.com/.well-known/nostr.json?name=alice',
+  ]);
+  // npub URLs need no lookup.
+  expect(
+    (await resolveRepositoryRef(`nostr://${nip19.npubEncode(pubkey)}/toy`, { fetch })).address,
+  ).toBe(`30617:${pubkey}:toy`);
+  expect(asked).toHaveLength(2);
+});
+test('a failed NIP-05 repository owner lookup keeps its cause and recovery', async () => {
+  const fetch = (async () =>
+    new Response('nope', { status: 503 })) as unknown as typeof globalThis.fetch;
+  const failure = await resolveRepositoryRef('nostr://example.com/toy', { fetch }).catch((e) => e);
+  const diagnostic = diagnose(failure);
+  expect(diagnostic.code).toBe('REPOSITORY_OWNER_LOOKUP');
+  expect(diagnostic.details).toContain(
+    'Cause (NIP05_STATUS): NIP-05 lookup returned an error status.',
+  );
+  expect(diagnostic.details).toContain('HTTP status: 503');
+  expect(diagnostic.recovery).toContain('publish.repository');
+});
+
+test('NIP-05 lookup cancels an oversized streaming response before buffering it', async () => {
+  let cancelled = false,
+    chunks = 0;
+  const response = new Response(
+    new ReadableStream<Uint8Array>({
+      pull(controller) {
+        chunks++;
+        controller.enqueue(new Uint8Array(32 * 1024));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    }),
+  );
+  const request = (async () => response) as unknown as typeof fetch;
+  const failure = await resolveRepositoryRef('nostr://example.com/toy', { fetch: request }).catch(
+    (e) => e,
+  );
+  expect(diagnose(failure).code).toBe('REPOSITORY_OWNER_LOOKUP');
+  expect((diagnose(failure).details ?? []).join(' ')).toContain('64 KiB');
+  expect(cancelled).toBe(true);
+  expect(chunks).toBeLessThanOrEqual(4);
+});

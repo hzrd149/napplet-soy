@@ -139,6 +139,12 @@ local HTTP error responses retain their `error` text and add a `diagnostic` obje
   Failed source alternatives retain their causes when no source succeeds.
   Proposal inbox confirmation includes failed Git ref pushes, and Git execution
   errors are distinguished from merge conflicts or an advanced upstream branch.
+- **Own source repository:** an unresolvable `nostr://` remote (`REPOSITORY_REMOTE`)
+  keeps each remote's name, URL and NIP-05/HTTP cause instead of falling back to a
+  hosted copy. `SOURCE_NOT_PUSHED` names the release commit, the signed refs checked
+  and each clone URL's `ls-remote` failure. `REPOSITORY_AMBIGUOUS`,
+  `REPOSITORY_OWNER` and `REPOSITORY_UNAVAILABLE` name the repository and how to
+  select one. These errors keep their own recovery when saved in the journal.
 - **Project tools:** setup, build and other wrapped commands retain a sanitized
   output tail. Vite watcher failures include their output and exit status when
   available. Toolchain downloads identify their destination and HTTP failure.
@@ -186,3 +192,8 @@ with a next step. Exhausted artifact downloads retain bounded server/HTTP/hash
 failure causes through the diagnostic boundary. `MIGRATION_PUBLISH` retains the
 primary relay refusal and instructs the author to resume the exact saved event.
 No migration failure silently rebuilds or overwrites an existing publication.
+
+`BACKEND_SOURCE_LINKED` reports the current remote-backend limitation when a
+project uses its own NIP-34 repository. The CLI identifies that repository and
+keeps the account unchanged; no remote build or authorization has been sent.
+Local backend previews remain available through `soyli dev`.

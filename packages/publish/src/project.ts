@@ -11,6 +11,7 @@ import {
   projectTopics,
   sourceDefaults,
   resolveTargets,
+  projectRepositoryReference,
   PublishError,
   type Targets,
 } from './config';
@@ -336,7 +337,13 @@ export async function inspectProject(
         }
       : {}),
   };
-  return { root, plan, contents, fingerprint: await sha256(JSON.stringify(plan)) };
+  return {
+    root,
+    plan,
+    contents,
+    fingerprint: await sha256(JSON.stringify(plan)),
+    repository: projectRepositoryReference(project, network),
+  };
 }
 export type PublishPlan = Awaited<ReturnType<typeof inspectProject>>['plan'];
 export async function durableFile(path: string, bytes: Uint8Array | string) {

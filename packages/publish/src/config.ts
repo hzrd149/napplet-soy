@@ -48,6 +48,10 @@ export const targetsSchema = z
   })
   .strict();
 export type Targets = z.infer<typeof targetsSchema>;
+const repositoryReference = z.string().min(1).max(512);
+const networkTargets = targetsSchema
+  .partial()
+  .extend({ repository: repositoryReference.optional() });
 export const recordingSchema = z
   .object({
     durationMs: z.number().int().min(2000).max(8000).default(6000),
@@ -198,10 +202,12 @@ export const projectSchema = z
       .partial()
       .extend({
         files: z.array(z.string().max(200)).min(3).max(MAX_SOURCE_FILES).optional(),
+        // The creator's own NIP-34 repository. It is referenced, never written.
+        repository: repositoryReference.optional(),
         networks: z
           .object({
-            public: targetsSchema.partial().optional(),
-            local: targetsSchema.partial().optional(),
+            public: networkTargets.optional(),
+            local: networkTargets.optional(),
           })
           .strict()
           .optional(),
@@ -237,11 +243,12 @@ export function resolveTargets(
   network: Network,
   overrides: Partial<Targets> = {},
 ): Targets {
-  const { files: _, networks, ...configured } = project.publish ?? {};
+  const { files: _, networks, repository: __, ...configured } = project.publish ?? {};
+  const { repository: ___, ...networkTargets } = networks?.[network] ?? {};
   const targets = targetsSchema.parse({
     ...defaultTargets(network),
     ...configured,
-    ...networks?.[network],
+    ...networkTargets,
     ...overrides,
   });
   const endpoint = (value: string, relay = false, site = false) => {
@@ -284,6 +291,10 @@ export function resolveTargets(
       'Use HTTPS/WSS public targets, or literal-loopback HTTP/WS targets with --network local.',
     );
   }
+}
+/** A per-network setting overrides the shared one. */
+export function projectRepositoryReference(project: Project, network: Network) {
+  return project.publish?.networks?.[network]?.repository ?? project.publish?.repository;
 }
 export function projectIdentity(project: Project) {
   return project.identifier ?? `n-${project.previewId.replaceAll('-', '').slice(0, 11)}`;

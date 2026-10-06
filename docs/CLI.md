@@ -336,6 +336,14 @@ changes stay local until `propose`, `push`, or `publish`. Source archives reflec
 committed tree; built HTML and screenshots are separate Blossom artifacts.
 See [collaboration](COLLABORATION.md) for proposing, reviewing and merging.
 
+#### Your own NIP-34 repository
+
+If the project has a `nostr://` Git remote owned by the publishing account (for
+example from ngit), or sets `publish.repository`, `soyli publish` releases against
+that repository instead of creating a hosted copy. Push the commit first; soyLI
+verifies it and never writes to that repository. See
+[publishing from your own NIP-34 repository](PUBLISHING.md#publishing-from-your-own-nip-34-repository).
+
 #### Historical source checks
 
 soyLI **0.23.2** checks reachable Git history during `publish --dry-run`, as

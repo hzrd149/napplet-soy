@@ -1,3 +1,4 @@
+import { nip19 } from 'nostr-tools';
 import { stack } from './publish-stack';
 import { cliTestVault } from './cli-test-vault';
 import { expect, test } from 'bun:test';
@@ -11,7 +12,13 @@ import {
 } from '../../packages/publish/src';
 import { Journal } from '../../packages/publish/src/journal';
 import { checkPublication } from '../../apps/cli/src/publish-check';
-import { sourceGit, sourceUrls } from '../../packages/grasp/src/client';
+import { diagnose } from '../../packages/diagnostics/src';
+import {
+  prepareSource,
+  publishSource,
+  sourceGit,
+  sourceUrls,
+} from '../../packages/grasp/src/client';
 import { sha256, validateRelease } from '../../packages/protocol/src';
 import { verifyEvent, type Filter, type NostrEvent } from 'nostr-tools';
 
@@ -804,6 +811,126 @@ test('collaboration: two creators publish, propose, review the exact Git tip, me
     expect(await sourceGit(original, ['status', '--porcelain'])).toBe('');
   } finally {
     client.close();
+    await services.close();
+  }
+}, 120000);
+
+test('a project with its own NIP-34 remote releases against it; soyLI signs and pushes no second repository', async () => {
+  const services = await stack();
+  const values = new Map<string, string>();
+  const vault: Vault = {
+    get: async (id) => values.get(id) ?? null,
+    set: async (id, value) => {
+      values.set(id, value);
+    },
+    delete: async (id) => {
+      values.delete(id);
+    },
+  };
+  try {
+    const accountHome = join(services.directory, 'account-home');
+    const accounts = new Accounts('local', join(accountHome, 'accounts/local'), vault);
+    const creator = await accounts.create();
+    const cli = new URL('../../apps/cli/src/index.ts', import.meta.url).pathname;
+    const create = Bun.spawn(
+      [process.execPath, cli, 'new', 'own-repo', '--template', 'soft-orbit', '--identity', 'later'],
+      { cwd: services.directory, stdout: 'pipe', stderr: 'pipe' },
+    );
+    expect(await create.exited).toBe(0);
+    const project = join(services.directory, 'own-repo');
+    await sourceGit(project, ['init', '--initial-branch=main']);
+    await Bun.write(join(project, '.git/info/exclude'), '.napplet-space/\n');
+    await sourceGit(project, ['add', '--all', '--', '.']);
+    if (await sourceGit(project, ['status', '--porcelain']))
+      await sourceGit(project, ['commit', '-m', 'Initial creation']);
+
+    // The creator's existing repository, announced and pushed as ngit would.
+    const urls = sourceUrls(services.targets.grasp, creator.pubkey, 'my-project', true);
+    let signer = await accounts.signer();
+    const own = await prepareSource({
+      directory: project,
+      identifier: 'my-project',
+      title: 'My project',
+      origin: services.targets.grasp,
+      local: true,
+      signer,
+    });
+    await signer.close();
+    await publishSource({
+      directory: project,
+      origin: services.targets.grasp,
+      local: true,
+      publication: own,
+    });
+    await sourceGit(project, [
+      'remote',
+      'add',
+      'origin',
+      `nostr://${nip19.npubEncode(creator.pubkey)}/my-project`,
+    ]);
+    const options = {
+      directory: project,
+      network: 'local' as const,
+      accounts,
+      targets: { ...services.targets, mirrors: [...services.targets.mirrors, urls.relay] },
+      check: checkPublication,
+    };
+    const result = await publishCommitted(options);
+    expect(result).toMatchObject({
+      status: 'announced_pending_index',
+      sourceRepository: { address: `30617:${creator.pubkey}:my-project`, hosted: false },
+    });
+    const [current] = await readRelay(services.targets.relay, {
+      kinds: [35129],
+      authors: [creator.pubkey],
+    });
+    expect(current.tags).toContainEqual(['source', urls.portable]);
+    const repositories = await readRelay(urls.relay, {
+      kinds: [30617, 30618],
+      authors: [creator.pubkey],
+    });
+    // Exactly the creator's own announcement and state, unchanged.
+    expect(repositories.map((e) => e.id).sort()).toEqual(
+      [own.announcement.id, own.state.id].sort(),
+    );
+
+    // A new commit that has not been pushed is refused before anything is signed.
+    await Bun.write(join(project, 'index.html'), '<!doctype html><title>Two</title><p>Two</p>');
+    await sourceGit(project, ['commit', '-am', 'Unpushed change']);
+    const failure = await publishCommitted(options).catch((e) => e);
+    const diagnostic = diagnose(failure);
+    expect(diagnostic.code, JSON.stringify(diagnostic)).toBe('SOURCE_NOT_PUSHED');
+    expect(diagnostic.recovery).toContain(await sourceGit(project, ['rev-parse', 'HEAD']));
+    expect(
+      await readRelay(services.targets.relay, { kinds: [35129, 5129], authors: [creator.pubkey] }),
+    ).toHaveLength(2);
+
+    // The real entrypoint reports an unreadable nostr:// remote with its cause, without secrets.
+    await sourceGit(project, ['remote', 'add', 'broken', 'nostr://unreachable.invalid/project']);
+    const child = Bun.spawn(
+      [process.execPath, cli, 'publish', '--project', project, '--network', 'local', '--dry-run'],
+      {
+        cwd: services.directory,
+        env: { PATH: process.env.PATH, SPACE_ACCOUNT_HOME: accountHome },
+        stdin: 'ignore',
+        stdout: 'pipe',
+        stderr: 'pipe',
+      },
+    );
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    const output = stdout + stderr;
+    expect(code).not.toBe(0);
+    expect(output).toContain('REPOSITORY_REMOTE');
+    expect(output).toContain('Git remote broken could not be read');
+    expect(output).toContain('unreachable.invalid');
+    expect(output).toContain('publish.repository');
+    expect(output).not.toContain(accountHome);
+    expect(output).not.toContain(creator.pubkey);
+  } finally {
     await services.close();
   }
 }, 120000);

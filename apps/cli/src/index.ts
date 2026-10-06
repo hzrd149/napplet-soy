@@ -896,9 +896,9 @@ try {
                 : (stage) => process.stderr.write(`Publishing: ${stage}\n`),
               summary: json
                 ? undefined
-                : (plan) =>
+                : (plan, repository) =>
                     process.stderr.write(
-                      `Creator: ${plan.pubkey}\nSource (${plan.sourceBytes} bytes, ${JSON.stringify(plan.license)}):\n${plan.files.map((file) => `  ${file.path}`).join('\n')}\nRelay: ${plan.targets.relay}\nBlossom: ${plan.targets.blossom}\nGit: ${plan.targets.grasp}\nSite: ${plan.targets.site}\nAdditional relay copies (best effort): ${plan.targets.mirrors.join(', ') || 'none'}\nPreview: selected PNG or automatic sandbox capture\n`,
+                      `Creator: ${plan.pubkey}\nSource (${plan.sourceBytes} bytes, ${JSON.stringify(plan.license)}):\n${plan.files.map((file) => `  ${file.path}`).join('\n')}\nRelay: ${plan.targets.relay}\nBlossom: ${plan.targets.blossom}\nGit: ${repository ? `your repository ${repository.address} (${repository.origin}); soyLI verifies the pushed commit and does not write to it` : plan.targets.grasp}\nSite: ${plan.targets.site}\nAdditional relay copies (best effort): ${plan.targets.mirrors.join(', ') || 'none'}\nPreview: selected PNG or automatic sandbox capture\n`,
                     ),
             });
           })();

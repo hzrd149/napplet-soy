@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { PrivateKeySigner } from 'applesauce-signers';
-import { matchFilter, type EventTemplate } from 'nostr-tools';
+import { matchFilter, nip19, type EventTemplate } from 'nostr-tools';
 import { aggregateHash, sha256, type SignedEvent } from '../../protocol/src';
 import {
   createLifecycleReceipt,
@@ -291,6 +291,29 @@ test('known historical preview images remain in the deletion inventory; unpublis
   expect(downloads).toBe(0);
   expect(unpublish.complete).toBe(true);
 });
+test('deleting a napplet keeps the creator’s own source repository but lists the hosted one', async () => {
+  const f = await fixture();
+  const npub = nip19.npubEncode(f.author);
+  const relay = encodeURIComponent('wss://git.example/');
+  const planFor = async (identifier: string) => {
+    const manifest = await f.sign({
+      ...f.current,
+      tags: [...f.current.tags, ['source', `nostr://${npub}/${relay}/${identifier}`]],
+    });
+    for (const rows of f.events.values()) rows.push(manifest);
+    return planLifecycle({ manifest, relays: f.relays, io: f.io });
+  };
+  const hosted = await planFor('world');
+  expect(hosted.repositories).toHaveLength(1);
+  expect(hosted.repositories[0].retained).toBeUndefined();
+  // After moving to their own repository, the earlier hosted copy is still deleted.
+  const own = await planFor('SuperSonicRCRevive');
+  const retained = Object.fromEntries(
+    own.repositories.map((r) => [r.address.split(':')[2], r.retained]),
+  );
+  expect(retained.world).toBeUndefined();
+  expect(retained.SuperSonicRCRevive).toContain('Your own source repository is kept');
+});
 
 test('standalone lifecycle scopes never delete same-author parents and inventory raw HTML/icon hashes', async () => {
   const f = await fixture();
@@ -515,4 +538,34 @@ test('retained signed revisions select historical pairs even when the relay prun
   expect(f.events.get(f.relays[0])!.filter((event) => [35129, 5129].includes(event.kind))).toEqual(
     [],
   );
+});
+
+test('deletion retains a linked repository whose identifier equals the napplet, in shell and journal plans', async () => {
+  const f = await fixture();
+  const address = `30617:${f.author}:world`;
+  const source = `nostr://${nip19.npubEncode(f.author)}/${encodeURIComponent('wss://git.example/')}/world`;
+  const manifest = await f.sign({
+    ...f.current,
+    tags: [...f.current.tags, ['source', source], ['soy-source-repository', address, 'linked']],
+  });
+  for (const rows of f.events.values()) rows.push(manifest);
+  const plan = await planLifecycle({ manifest, relays: f.relays, io: f.io });
+  expect(plan.repositories).toHaveLength(1);
+  expect(plan.repositories[0].retained).toContain('Your own source repository is kept');
+  const receipt = createLifecycleReceipt(plan, 'delete');
+  await executeLifecycle(receipt, { signer: f.signer, io: f.io, save: async () => {} });
+  expect(receipt.events.deletion.tags).not.toContainEqual(['a', address]);
+  const repositorySteps = receipt.steps.filter((s) => s.id.startsWith('repo:'));
+  expect(repositorySteps).toHaveLength(1);
+  expect(repositorySteps[0].state).toBe('retained');
+
+  // Previously signed releases are also protected by the local job record.
+  const old = await f.sign({ ...f.current, tags: [...f.current.tags, ['source', source]] });
+  const journalPlan = await planLifecycle({
+    manifest: old,
+    relays: f.relays,
+    io: f.io,
+    retainedRepositories: [address],
+  });
+  expect(journalPlan.repositories.every((repo) => !!repo.retained)).toBe(true);
 });
