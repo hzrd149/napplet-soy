@@ -84,6 +84,13 @@ recoverable from Blossom even if the branch later moves. soyLI does not add
 release tags to your repository; keep released commits reachable there.
 `publish --dry-run` and the JSON result report `sourceRepository`.
 
+Dynamic backend deployment still requires soyLI-managed GRASP source. When an
+existing repository is selected, `backend deploy` stops with
+`BACKEND_SOURCE_LINKED` before contacting a provider or requesting authorization,
+instead of trying to build from a nonexistent generated repository. Local backend
+previews through `soyli dev` remain available. Supporting linked repositories for
+remote backend builds is a separate follow-up.
+
 An existing napplet can move from the hosted repository to your own; the Git host
 check does not apply then. The earlier hosted repository is left in place for older
 releases. [Deleting the napplet](LIFECYCLE.md) removes hosted repositories but keeps

@@ -192,3 +192,8 @@ with a next step. Exhausted artifact downloads retain bounded server/HTTP/hash
 failure causes through the diagnostic boundary. `MIGRATION_PUBLISH` retains the
 primary relay refusal and instructs the author to resume the exact saved event.
 No migration failure silently rebuilds or overwrites an existing publication.
+
+`BACKEND_SOURCE_LINKED` reports the current remote-backend limitation when a
+project uses its own NIP-34 repository. The CLI identifies that repository and
+keeps the account unchanged; no remote build or authorization has been sent.
+Local backend previews remain available through `soyli dev`.
