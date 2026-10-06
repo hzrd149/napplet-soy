@@ -15,7 +15,8 @@ tagging. The source correction accepts those mentions while requiring the refere
 parent's author and preserving thread isolation. Existing import tolerance for absent
 uppercase `P` remains; writers always emit it. Signed regressions and the related
 social/gallery/proposal suites pass 25 tests/233 assertions, plus TypeScript.
-Implemented and verified locally; this follow-up is not yet committed or deployed.
+Implemented, verified and deployed on 2026-10-06 in `20261006111729495-77355`,
+with soyLI 0.24.2. The selected NIP-5D authority and dependency pins remain unchanged.
 
 ## NIP-5D standalone manifest migration — 2026-10-04
 

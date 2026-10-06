@@ -1,9 +1,13 @@
 # soyLI releases and updates
 
 GitHub Releases distribute the standalone CLI independently of the website/VPS.
-The current published version is **0.24.1**.
+The current published version is **0.24.2**.
 
-**0.24.2 prepared 2026-10-06; publication and website deployment pending.**
+**0.24.2 published and deployed 2026-10-06 (Europe/Vienna):**
+[GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.24.2),
+source `8f809650b2fe4d1fd4f6bf045159d28868a893ae`.
+[Workflow 37454517650](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37454517650)
+passed the source gate, all four native jobs and publication of all 11 assets.
 
 Fresh projects and remix discovery use seven public relay defaults, including
 five additional relays that supplied the affected creator's verified name and
@@ -26,7 +30,17 @@ after deployment. No republish or napplet migration is needed for profile displa
 
 Local verification passes TypeScript, 552 source tests (4,518 assertions), the
 production build and six profile/proposal/source browser tests (28 assertions).
-Native CI and live rollout verification remain pending.
+Release checksums and an isolated public installation pass; `doctor` reports
+0.24.2 as up to date, and a clean account-free project receives the new relay list.
+
+Website release `20261006111729495-77355` is active. The standard deployment
+passed all 552 source tests on VPS Bun 1.3.8, including the handshake regressions,
+Go race checks, relay/Blossom/GRASP integration, production build and three Linux
+backend isolation/backup/authorization tests. Fresh public desktop and 390px
+browser sessions show the affected creator's name/avatar in both detail and
+account header using the actual site defaults, with no page errors or overflow.
+Root/docs, installer bytes, public services and index health pass. Shared proxy
+checksums are unchanged; the other site returns 200. Persistent state was retained.
 
 **0.24.1 published 2026-10-05 (Europe/Vienna):**
 [GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.24.1),
@@ -45,7 +59,7 @@ source tests pass (4,425 assertions). A checksum-verified public installation re
 actual public napplet's 1,063,318-byte HTML and prepares its conversion without
 account setup or signing. All other 0.24.0 migration/compatibility behavior remains.
 
-The website is active in deployment `20261005095909023-57511`. Its installer and
+The 0.24.1 website was activated in deployment `20261005095909023-57511`. Its installer and
 all four manual downloads point to 0.24.1. Fresh live desktop/mobile checks pass:
 gallery tools follow social rankings, both chronology options are present, the
 affected updated napplet shows its existing 10,000 sats, and no page errors or

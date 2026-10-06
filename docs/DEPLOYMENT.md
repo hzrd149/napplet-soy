@@ -3,9 +3,29 @@
 Deployment is operator-run. Routine changes are verified and committed locally;
 do not deploy or upload releases unless the user explicitly requests deployment.
 
-Updated 2026-09-26. **[napplet.soy](https://napplet.soy) is live**, using the temporary legacy CPU profile on the existing Namecheap VPS. Caddy issued valid Let's Encrypt certificates for the website, www, Blossom and Git; the other site remains available. The deploy script includes Caddy and PM2. Local production builds exercise the same web, relay, Blossom and GRASP implementations and PM2 definitions. Dedicated hosts use the pinned local Caddy version; shared hosts retain their existing Caddy. See the deployment record below for verification and the compatibility workaround.
+Updated 2026-10-06. **[napplet.soy](https://napplet.soy) is live**, using the temporary legacy CPU profile on the existing Namecheap VPS. Caddy issued valid Let's Encrypt certificates for the website, www, Blossom and Git; the other site remains available. The deploy script includes Caddy and PM2. Local production builds exercise the same web, relay, Blossom and GRASP implementations and PM2 definitions. Dedicated hosts use the pinned local Caddy version; shared hosts retain their existing Caddy. See the deployment record below for verification and the compatibility workaround.
 
-Latest verified website release: **`20260926054112843-53639`**, from source `923e89e`,
+Latest verified website release: **`20261006111729495-77355`**, source `8f80965`,
+installer pinned to **soyLI 0.24.2**. [Native release CI](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37454517650)
+passed all four platform jobs and publication. Public checksums and an isolated
+installation verify the source revision, installer and new-project relay defaults.
+
+The normal deployment passed TypeScript and 552 source tests locally and on VPS
+Bun 1.3.8, including four failed-handshake/queued-timeout process regressions.
+Go race checks, relay/Blossom/GRASP integration, production build and three Linux
+backend isolation/backup/authorization tests passed before candidate activation.
+Fresh public desktop/390px browsers resolve Schlaus Kwab's name/avatar in both
+napplet heading and account header using the deployed seven-relay defaults;
+root/docs have no page errors or horizontal overflow. Public HTTPS, exact 0.24.2
+installer bytes, managed relay/Blossom/GRASP and current index health pass. Caddy,
+CVM and TURN are active; all five PM2 services are online with zero restarts at
+verification. Both shared proxy checksums are unchanged and schlaustronics.com
+returns 200. Persistent state was retained; `20261005095909023-57511` remains for
+rollback. This short verification window does not establish long-term uptime.
+
+### Previous verified rollout — 2026-09-26
+
+Website release: **`20260926054112843-53639`**, from source `923e89e`,
 with the installer pinned to **soyLI 0.23.4**. GitHub
 [release CI](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/36221163275)
 passed source checks, all four native builds, installer/updater, delayed-signing
@@ -124,8 +144,9 @@ causing intermittent proxy 502s during PM2 restart. The adapter preserves the
 original relay error and ordinary handshake deadlines; DNS, TLS, redirect and
 payload checks remain enforced. Child-process HTTP regressions cover failed
 queries and publication with a healthy relay fallback, cleanup and timeout errors.
-This correction was verified locally on 2026-10-06; the live release
-`20261005095909023-57511` still requires deployment to receive it.
+This correction passed on both local Bun 1.3.11 and VPS Bun 1.3.8 and was deployed
+on 2026-10-06 in `20261006111729495-77355`. The web process is online with zero
+restarts at initial live verification; longer-term observation remains separate.
 
 All ordinary checks still run, plus libvips's own test suite and a codec smoke check. Bun executes a small JavaScript program under a separate 768 MiB/15-second limit before further toolchain installation or builds. A release retains its own runtime symlink, so selecting the normal profile later does not change the runtime used by a rollback release. To return to the standard profile after the CPU is fixed, rerun deployment without `--legacy-cpu`; keep the prior release and its compatibility library directory while it remains a rollback candidate.
 

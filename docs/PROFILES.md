@@ -29,7 +29,9 @@ The expanded default network uses Soy plus six public relays, including five
 that supplied the reported creator's signed metadata in the 2026-10-06 review.
 Server-side profile reads now use up to eight configured destinations, matching
 the browser settings limit. Explicit custom networks remain authoritative; new
-defaults require deployment, and existing creator projects keep saved relay lists.
+the new defaults were deployed on 2026-10-06 in `20261006111729495-77355`, and
+existing creator projects keep saved relay lists. Fresh public desktop/390px
+checks resolve the affected creator in both the detail heading and account menu.
 See [relay defaults and dated verification](RELAY-DEFAULTS.md).
 SSR includes profile text, canonical metadata, and a generated 1200×630 PNG share
 card. The OG renderer receives escaped text, never an arbitrary remote resource.

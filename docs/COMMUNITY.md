@@ -140,7 +140,8 @@ references; proposal discussions also use kind 1111. The reader now permits addi
 lowercase `p` tags for profile mentions while still requiring the author of the
 referenced parent. Previously multiple `p` tags incorrectly hid valid comments and
 replies from other clients, along with their comment reactions. This source correction
-passes 25 related tests (233 assertions) and TypeScript; it is not yet deployed.
+passes 25 related tests (233 assertions) and TypeScript; it was deployed on
+2026-10-06 in `20261006111729495-77355`, with soyLI 0.24.2.
 The existing import compatibility accepts an absent uppercase `P` when the root is
 unambiguous, rejects a conflicting supplied `P`, and does not omit it when publishing.
 

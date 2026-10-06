@@ -1,7 +1,10 @@
 # Public relay defaults
 
-Reviewed on **2026-10-06**. The expanded set below is implemented and verified
-locally; it has not yet been released in soyLI or deployed to the website.
+Reviewed on **2026-10-06**. The expanded set below is released in **soyLI 0.24.2**
+and deployed to napplet.soy in **`20261006111729495-77355`**. Fresh public desktop
+and phone-sized sessions resolve the affected creator's name/avatar in both the
+napplet heading and account header using these site defaults. See
+[the release verification](CLI-RELEASES.md).
 
 | Relay | Default role |
 | --- | --- |
