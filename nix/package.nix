@@ -105,6 +105,20 @@ let
         --ignore-scripts \
         --no-progress
 
+      # Bun 1.3.11 can race when linking this cyclic peer dependency's bin:
+      # https://github.com/oven-sh/bun/issues/30209. Normalize the link so
+      # identical locked dependencies always have the same recursive hash.
+      for dependencyModules in node_modules/.bun/update-browserslist-db@*/node_modules; do
+        if [ -d "$dependencyModules" ]; then
+          if [ ! -f "$dependencyModules/browserslist/cli.js" ]; then
+            echo "soyli: locked browserslist dependency is missing from $dependencyModules" >&2
+            exit 1
+          fi
+          mkdir -p "$dependencyModules/.bin"
+          ln -sfn ../browserslist/cli.js "$dependencyModules/.bin/browserslist"
+        fi
+      done
+
       runHook postBuild
     '';
 

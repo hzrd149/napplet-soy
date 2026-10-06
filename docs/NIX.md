@@ -79,8 +79,15 @@ The build intentionally fails when nixpkgs drifts from the CLI's pins:
 must equal `@playwright/test`. Update the pins and nixpkgs together.
 
 `soyli-node-modules` is a fixed-output derivation of `bun install` over the
-manifests and `bun.lock`. After any dependency change, rebuild it and copy the
-reported hash into `nix/package.nix`:
+manifests and `bun.lock`. The pinned Bun 1.3.11 can intermittently omit the
+`browserslist` executable link inside its cyclic peer dependency,
+`update-browserslist-db` ([upstream issue](https://github.com/oven-sh/bun/issues/30209)).
+The build restores that link after checking its installed target, keeping the
+expected dependency hash unchanged. Remove this workaround once the Bun pin
+includes the upstream fix.
+
+After any dependency change, rebuild it and copy the reported hash into
+`nix/package.nix`:
 
 ```sh
 nix build .#nodeModules   # prints "got: sha256-…" on a mismatch
