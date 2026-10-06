@@ -27,11 +27,11 @@ nix profile install github:zeSchlausKwab/napplet-soy
 }
 ```
 
-| Option | Default | Effect |
-| --- | --- | --- |
-| `programs.soyli.enable` | `false` | Installs `soyli` (and the legacy `napplet-space` alias) system-wide. |
-| `programs.soyli.package` | flake package | The soyLI package to install. |
-| `programs.soyli.keyring.enable` | `true` | Enables GNOME Keyring as the Secret Service used for local private keys. Disable it when another provider such as KeePassXC is configured. |
+| Option                          | Default       | Effect                                                                                                                                     |
+| ------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `programs.soyli.enable`         | `false`       | Installs `soyli` (and the legacy `napplet-space` alias) system-wide.                                                                       |
+| `programs.soyli.package`        | flake package | The soyLI package to install.                                                                                                              |
+| `programs.soyli.keyring.enable` | `true`        | Enables GNOME Keyring as the Secret Service used for local private keys. Disable it when another provider such as KeePassXC is configured. |
 
 The module adds no service. Without a desktop session, local private keys need an
 unlocked Secret Service on a D-Bus session bus. Remote-signer file sessions need
@@ -50,7 +50,14 @@ support files live in the store. The `soyli` wrapper supplies:
   toolchain cache (`~/.cache/napplet-space/toolchains`) holds only the pnpm link
   and Rust helper tools.
 - **Browser:** `PLAYWRIGHT_BROWSERS_PATH` defaults to nixpkgs' Playwright Chromium
-  for the same Playwright version. Set the variable to use another browser cache.
+  for the same Playwright version. `soyli run test:conformance` checks the
+  project's own Playwright driver and reuses its compatible headless Chromium
+  and FFmpeg without running the installer or writing into the store. A missing
+  or mismatched browser reports `CONFORMANCE_BROWSER` before the project script
+  starts. Update the flake/package and rebuild, align the project's Playwright
+  version, or set `PLAYWRIGHT_BROWSERS_PATH` to an existing compatible cache.
+  Nix builds never auto-download browsers for this command. Ordinary release
+  installations still download missing compatible browsers automatically.
 - **Credentials:** libsecret and glib are on the loader path that `Bun.secrets` uses.
   soyLI restores the caller's `LD_LIBRARY_PATH` for the programs it starts
   (Git, browser openers, coturn), so they do not inherit those libraries.
@@ -61,8 +68,9 @@ support files live in the store. The `soyli` wrapper supplies:
 profile instead; `soyli doctor` still reports the latest published release. Update
 with `nix flake update soyli` and a rebuild, or `nix profile upgrade`.
 
-The closure is about 1.5 GiB, mostly Chromium and its headless shell, which the
-release archive would otherwise download on first use.
+The contributor reported a closure of about 1.5 GiB, mostly Chromium and its
+headless shell. Its size varies with the pinned dependencies. The release archive
+would otherwise download these browsers on first use.
 
 ## Maintaining the package
 
@@ -87,5 +95,10 @@ nix flake check   # package and the NixOS VM test (x86_64-linux, needs KVM)
 ```
 
 The VM test (`nix/test.nix`) checks offline doctor, the Nix-managed update refusal,
-a browser conformance check with the packaged Chromium, setup and scripts with the
-store toolchain, and an account key stored through GNOME Keyring.
+the shell's browser check and the actual upstream `soyli run test:conformance`
+command with packaged Chromium, actionable recovery for an incompatible browser
+cache, setup and scripts with the store toolchain, and an account key stored
+through GNOME Keyring. The upstream fixture is assembled from pinned npm
+archives at build time; the VM needs no network access and creates no browser
+cache. The `soyLI Nix` GitHub workflow runs these checks on Linux for changes to
+packaging, dependency pins, CLI code or its bundled preview.

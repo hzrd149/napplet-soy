@@ -11,6 +11,7 @@ in
     {
       imports = [ self.nixosModules.default ];
 
+
       programs.soyli.enable = true;
 
       users.users.alice = {
@@ -20,6 +21,13 @@ in
 
       environment.systemPackages = [ pkgs.dbus ];
       environment.etc = {
+        # A real upstream runner and its protocol dependency, fetched only at
+        # build time. The VM is offline, without installing project dependencies.
+        "soyli-conformance".source = import ./conformance-fixture.nix {
+          inherit pkgs;
+          soyli = self.packages.${pkgs.stdenv.hostPlatform.system}.soyli;
+        };
+        "soyli-missing-browsers/placeholder".text = "";
         "soyli-fixtures/mini/napplet.json".text = builtins.toJSON {
           schema = "space-local-project/v1";
           name = "Nix fixture";
@@ -41,6 +49,7 @@ in
     };
 
   testScript = ''
+    import json
     import shlex
 
     def alice(command):
@@ -70,6 +79,23 @@ in
             if status == 0:
                 break
         assert status == 0 and '"status":"checked"' in out.replace(" ", ""), out
+        alice("test ! -e ~/.cache/napplet-space/browsers")
+
+    with subtest("upstream conformance reuses packaged browsers without installing"):
+        alice("cp -rL /etc/soyli-conformance ./conformance && chmod -R u+w conformance")
+        out = alice("cd conformance && soyli run test:conformance 2>&1")
+        assert "RESULT: CONFORMANT" in out, out
+        alice("test ! -e ~/.cache/napplet-space/browsers")
+
+    with subtest("incompatible browser cache fails before any installer"):
+        out = machine.fail("su - alice -c 'cd conformance && PLAYWRIGHT_BROWSERS_PATH=/etc/soyli-missing-browsers soyli run test:conformance --json'")
+        error = json.loads(out)["error"]
+        assert error["code"] == "CONFORMANCE_BROWSER", out
+        assert error["operation"] == "prepare conformance browser", out
+        assert "chromium-headless-shell" in "\n".join(error["details"]), out
+        assert "Nix" in error["recovery"] and "PLAYWRIGHT_BROWSERS_PATH" in error["recovery"], out
+        assert "No browser installer was run" in error["recovery"], out
+        machine.succeed("test ! -e /etc/soyli-missing-browsers/.links && test ! -e /etc/soyli-missing-browsers/__dirlock")
         alice("test ! -e ~/.cache/napplet-space/browsers")
 
     with subtest("project toolchain comes from the Nix store"):

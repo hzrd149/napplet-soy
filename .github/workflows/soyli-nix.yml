@@ -1,0 +1,52 @@
+name: soyLI Nix
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/soyli-nix.yml'
+      - 'flake.*'
+      - 'nix/**'
+      - 'apps/cli/**'
+      - 'apps/web/src/**'
+      - 'apps/web/public/**'
+      - 'packages/**'
+      - 'scripts/cli-*'
+      - 'package.json'
+      - 'bun.lock'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/soyli-nix.yml'
+      - 'flake.*'
+      - 'nix/**'
+      - 'apps/cli/**'
+      - 'apps/web/src/**'
+      - 'apps/web/public/**'
+      - 'packages/**'
+      - 'scripts/cli-*'
+      - 'package.json'
+      - 'bun.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: soyli-nix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+        with:
+          github_access_token: ${{ github.token }}
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - name: Build package and run offline NixOS VM regressions
+        run: nix flake check --print-build-logs

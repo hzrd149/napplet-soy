@@ -14,6 +14,7 @@ on:
       - 'tests/services/app-data-cli.test.ts'
       - 'tests/services/backend-account-browser.test.ts'
       - 'tests/services/managed-boilerplate.test.ts'
+      - 'tests/services/packaged-cli.test.ts'
       - 'tests/services/asset-manager.test.ts'
       - 'package.json'
       - 'bun.lock'
@@ -91,6 +92,7 @@ jobs:
           bun test tests/services/asset-manager.test.ts
           bun test tests/services/backend-account-browser.test.ts
           bun test tests/services/managed-boilerplate.test.ts
+          bun test tests/services/packaged-cli.test.ts
       - name: Fresh account-free create, build and browser check
         env:
           VERSION: ${{ needs.check.outputs.version }}

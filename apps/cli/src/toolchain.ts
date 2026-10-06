@@ -16,6 +16,7 @@ import pins from '../vendor/toolchain.json';
 import { AccountError } from '../../../packages/identity/src/signer';
 import { backendProject } from './backend';
 import { selectNodeToolchain } from './toolchain-platform';
+import { packagedBy } from './distribution';
 
 export const toolchainCache = () =>
   resolve(
@@ -285,19 +286,89 @@ export async function buildProject(directory: string, signal?: AbortSignal) {
   await projectTool(directory, ['run', 'build'], signal);
 }
 
+// Ask the project's own driver in a fresh Node process. Its registry selects the
+// revision and platform-specific executable paths; the bundled CLI driver can
+// differ, and importing either registry in-process would cache its environment.
+const conformanceBrowserProbe = String.raw`
+const {createRequire} = require('node:module');
+const {dirname, join} = require('node:path');
+const {accessSync, constants, existsSync} = require('node:fs');
+const playwright = process.argv[1];
+const r = createRequire(playwright);
+const core = dirname(r.resolve('playwright-core/package.json'));
+const coreRequire = createRequire(join(core, 'package.json'));
+const registry = existsSync(join(core, 'lib/coreBundle.js'))
+  ? coreRequire('./lib/coreBundle.js').registry.registry
+  : coreRequire('./lib/server/registry/index.js').registry;
+const metadata = coreRequire('./browsers.json');
+console.log(JSON.stringify({
+  version: r(playwright).version,
+  browsers: ['chromium-headless-shell', 'ffmpeg'].map(name => {
+    const executable = registry.findExecutable(name);
+    const path = executable && executable.executablePath();
+    let installed = false;
+    if (path) try { accessSync(path, constants.X_OK); installed = true; } catch {}
+    return {name, path, revision: metadata.browsers.find(browser => browser.name === name)?.revision, installed};
+  }),
+}));
+`;
+
 export async function installConformanceBrowser(directory: string, signal?: AbortSignal) {
   const tools = await prepared(signal);
   const projectRequire = createRequire(join(resolve(directory), 'package.json'));
   const conformanceRequire = createRequire(
     projectRequire.resolve('@napplet/conformance-cli/package.json'),
   );
-  const cli = join(dirname(conformanceRequire.resolve('playwright/package.json')), 'cli.js');
+  const playwright = conformanceRequire.resolve('playwright/package.json');
+  const inspect = async () =>
+    JSON.parse(
+      await command(
+        [tools.nodeBin, '-e', conformanceBrowserProbe, playwright],
+        directory,
+        tools.env,
+        signal,
+        true,
+        'inspect project conformance browser',
+      ),
+    ) as {
+      version: string;
+      browsers: Array<{ name: string; path?: string; revision?: string; installed: boolean }>;
+    };
+  let required = await inspect();
+  if (required.browsers.every((browser) => browser.installed)) return;
+  const missing = () => required.browsers.filter((browser) => !browser.installed);
+  const failure = (managed: boolean) =>
+    new DiagnosticError(
+      'CONFORMANCE_BROWSER',
+      `Compatible browsers for the project's Playwright ${required.version} are missing.`,
+      {
+        operation: 'prepare conformance browser',
+        tool: 'Playwright',
+        target: missing()[0]?.path || tools.env.PLAYWRIGHT_BROWSERS_PATH,
+        detail: missing()
+          .map(
+            (browser) =>
+              `${browser.name} revision ${browser.revision || 'unknown'}: ${browser.path || 'no executable for this platform'}`,
+          )
+          .join('\n'),
+        recovery: managed
+          ? 'Update the Nix flake/package and rebuild, align the project Playwright version, or set PLAYWRIGHT_BROWSERS_PATH to an existing compatible browser installation. No browser installer was run.'
+          : 'Inspect the project Playwright installation and browser cache, then retry soyli run test:conformance.',
+      },
+    );
+  // Nix owns these browsers. Even an otherwise successful Playwright installer
+  // writes lock and .links metadata, which cannot live in the read-only store.
+  if (packagedBy === 'nix') throw failure(true);
   await command(
-    [tools.nodeBin, cli, 'install', '--only-shell', 'chromium'],
+    [tools.nodeBin, join(dirname(playwright), 'cli.js'), 'install', '--only-shell', 'chromium'],
     directory,
     tools.env,
     signal,
+    false,
+    'install project conformance browser',
   );
+  required = await inspect();
+  if (missing().length) throw failure(false);
 }
 
 /** Watch source through Vite's actual single-file plugin; keep host preview separate. */

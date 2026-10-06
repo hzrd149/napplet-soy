@@ -1,5 +1,15 @@
 # soyLI error diagnostics
 
+`CONFORMANCE_BROWSER` identifies missing compatible headless Chromium or FFmpeg
+for the project's own Playwright version, including the expected revision and
+executable path. Nix builds report this before running the project conformance
+script or a browser installer, with flake/version/cache recovery options. Regular
+installations still install missing browsers automatically. Browser inspection
+and installation failures retain the tool's cause and exit status. Real compiled
+CLI regressions cover cache reuse, Nix refusal, terminal/JSON recovery, and the
+ordinary installation fallback; the offline NixOS VM also runs upstream
+conformance with real packaged Chromium.
+
 Historical source failures now identify the rejected path, Git blob, containing
 commit and release commit without printing blob contents. `publish --dry-run`
 performs the same history checks before sandbox/network work; these failures are
