@@ -36,6 +36,9 @@ pkgs.runCommand "soyli-conformance-fixture" { } ''
     tar -xzf "$archive" --strip-components=1 -C "$out/node_modules/@napplet/$name"
   done
   ln -s ${soyli.passthru.nodeModules}/node_modules/.bun/playwright@${playwrightVersion}/node_modules/playwright "$out/node_modules/playwright"
+  # Bun keeps this dependency beside Playwright in its virtual store. Keep both
+  # at project level so dereferencing this fixture into the VM preserves imports.
+  ln -s ${soyli.passthru.nodeModules}/node_modules/.bun/playwright-core@${playwrightVersion}/node_modules/playwright-core "$out/node_modules/playwright-core"
   # The project already has its dependencies; soyLI should not run pnpm install.
   touch "$out/node_modules/.modules.yaml"
   cp ${package} "$out/package.json"
