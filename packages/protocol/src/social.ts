@@ -115,11 +115,16 @@ export function rootComment(e: SignedEvent, scope: SocialScope) {
     (!oneTag(e, 'P') || oneTag(e, 'P') === scope.author)
   );
 }
+function tagsParentAuthor(e: SignedEvent, author: string) {
+  // NIP-22 also uses p tags for profile mentions. The parent reference fixes
+  // which author must be present; other mentions do not change that binding.
+  return e.tags.some((t) => t[0] === 'p' && t[1] === author);
+}
 export function validComment(e: SignedEvent, scope: SocialScope, events: Map<string, SignedEvent>) {
   if (!rootComment(e, scope)) return false;
   const k = oneTag(e, 'k');
   if (k === String(scope.kind)) {
-    if (oneTag(e, scope.address ? 'a' : 'e') !== scope.key || oneTag(e, 'p') !== scope.author)
+    if (oneTag(e, scope.address ? 'a' : 'e') !== scope.key || !tagsParentAuthor(e, scope.author))
       return false;
     if (scope.address && e.tags.some((t) => t[0] === 'e')) {
       const id = oneTag(e, 'e');
@@ -136,7 +141,7 @@ export function validComment(e: SignedEvent, scope: SocialScope, events: Map<str
   return (
     !!parent &&
     rootComment(parent, scope) &&
-    oneTag(e, 'p') === parent.pubkey &&
+    tagsParentAuthor(e, parent.pubkey) &&
     e.id !== parent.id &&
     parent.created_at <= e.created_at
   );

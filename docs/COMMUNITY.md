@@ -135,6 +135,15 @@ authorization, not a replayed auth event. The claim itself remains idempotent.
 
 Comments use [NIP-22](https://github.com/nostr-protocol/nips/blob/master/22.md) kind 1111 with address-qualified root and parent tags for named/root napplets (including the current event reference when available). Replies retain the root and reference their parent comment. These address threads survive title changes, aliases and new versions. New standalone snapshots have their own event-rooted threads; even a same-author `a` or `A` ancestry claim cannot borrow a parent's conversation. Only legacy snapshots retain their validated same-author self-address grouping. HTML-looking strings remain escaped text; recognized references receive the presentation described below. See the [manifest migration](NIP5D-MIGRATION.md) for pinned named revisions and gallery pair presentation.
 
+NIP-22 audit, 2026-10-05: writers include `K`/`k`, `P`/`p`, and separate root/parent
+references; proposal discussions also use kind 1111. The reader now permits additional
+lowercase `p` tags for profile mentions while still requiring the author of the
+referenced parent. Previously multiple `p` tags incorrectly hid valid comments and
+replies from other clients, along with their comment reactions. This source correction
+passes 25 related tests (233 assertions) and TypeScript; it is not yet deployed.
+The existing import compatibility accepts an absent uppercase `P` when the root is
+unambiguous, rejects a conflicting supplied `P`, and does not omit it when publishing.
+
 ### Rich comment presentation — 2026-09-15
 
 Paste a napplet link, `nostr:naddr`, `note` or `nevent` into a comment to offer **Play

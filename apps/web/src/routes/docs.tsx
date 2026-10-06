@@ -4,6 +4,7 @@ import { DocCommand } from '@/components/doc-command';
 import { createCommand } from '@/lib/creator-commands';
 import { SoyliBenefits, SoyliIdentity } from '@/components/soyli-intro';
 import { siteHead } from '@/lib/site-head';
+import discoveryRelays from '../../../../packages/nostr/discovery-relays.json';
 
 const description =
   'The napplet soyLI field guide: create, preview, publish and collaborate. Manage identities, preserve keys and choose where your work goes.';
@@ -316,11 +317,18 @@ function Documentation() {
               </div>
             </dl>
             <p>
-              These are defaults. New projects include five additional relays: Damus, nos.lol,
-              Primal, nostr.mom and Pocketstr. The optional <code>mirrors</code> list adds copies
-              after the primary publication succeeds; existing project lists stay as configured. You
-              can use other compatible providers; changing an existing relay or Git repository needs
-              an explicit migration, not just a retry with new settings.
+              These are defaults. New projects include {discoveryRelays.length} additional relay
+              copies:{' '}
+              {discoveryRelays.map((relay, index) => (
+                <span key={relay}>
+                  {index > 0 && ', '}
+                  <code>{relay}</code>
+                </span>
+              ))}
+              . The optional <code>mirrors</code> list adds copies after the primary publication
+              succeeds; existing project lists stay as configured. You can use other compatible
+              providers; changing an existing relay or Git repository needs an explicit migration,
+              not just a retry with new settings.
             </p>
             <p>
               Publication returns a portable Nostr address and a release link. To claim a readable{' '}

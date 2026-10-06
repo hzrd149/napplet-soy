@@ -117,6 +117,16 @@ The build enables PNG, JPEG, WebP and GIF decoding plus EXIF/color support. Opti
 
 Bun 1.3.8 also loses the original TLS hostname when `node:https` uses a custom DNS lookup. On that pinned runtime, guarded public HTTPS downloads run in a short-lived Node worker using the same DNS, certificate, redirect and byte-limit checks. This applies to artifacts, resources and preview images; SHA-256 verification remains in the caller. Newer Bun and the standalone CLI keep their existing transport. No TLS verification is disabled.
 
+Server-side relay handshakes also clear their owned request's timeout listener
+after a request error. A queued timeout after failure otherwise makes the pinned
+`ws` implementation dereference its cleared request and terminate the web process,
+causing intermittent proxy 502s during PM2 restart. The adapter preserves the
+original relay error and ordinary handshake deadlines; DNS, TLS, redirect and
+payload checks remain enforced. Child-process HTTP regressions cover failed
+queries and publication with a healthy relay fallback, cleanup and timeout errors.
+This correction was verified locally on 2026-10-06; the live release
+`20261005095909023-57511` still requires deployment to receive it.
+
 All ordinary checks still run, plus libvips's own test suite and a codec smoke check. Bun executes a small JavaScript program under a separate 768 MiB/15-second limit before further toolchain installation or builds. A release retains its own runtime symlink, so selecting the normal profile later does not change the runtime used by a rollback release. To return to the standard profile after the CPU is fixed, rerun deployment without `--legacy-cpu`; keep the prior release and its compatibility library directory while it remains a rollback candidate.
 
 ## Local parity and remaining services

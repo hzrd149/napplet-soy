@@ -56,7 +56,7 @@ export async function socialContext(reference: string): Promise<SocialContext> {
       ...(status.index.relays ?? []),
       ...status.relays,
     ]),
-  ].slice(0, 6);
+  ].slice(0, 8);
   return { scope, manifest, relays };
 }
 export class SocialService {

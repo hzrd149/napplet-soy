@@ -3,6 +3,31 @@
 GitHub Releases distribute the standalone CLI independently of the website/VPS.
 The current published version is **0.24.1**.
 
+**0.24.2 prepared 2026-10-06; publication and website deployment pending.**
+
+Fresh projects and remix discovery use seven public relay defaults, including
+five additional relays that supplied the affected creator's verified name and
+avatar during anonymous checks. Failing older defaults have been replaced.
+Existing project destinations, saved browser networks and operator overrides
+remain authoritative; no signer or ContextVM relay settings change.
+See [relay defaults](RELAY-DEFAULTS.md) for the current set and dated evidence.
+
+The shared server retains up to eight configured profile/social destinations.
+A failed relay handshake can no longer terminate the web process when Bun emits
+a queued timeout after the request error. Original failures and handshake
+deadlines remain intact. NIP-22 comment readers accept additional mentioned
+people while still requiring the actual parent author and correct thread.
+These server changes require a website deployment in addition to the CLI release.
+
+After updating soyLI, restart previews. Existing projects can edit their Extra
+relay copies in the local manager; saved publication jobs retain their original
+destinations. Website users with custom networks can choose **Use site defaults**
+after deployment. No republish or napplet migration is needed for profile display.
+
+Local verification passes TypeScript, 552 source tests (4,518 assertions), the
+production build and six profile/proposal/source browser tests (28 assertions).
+Native CI and live rollout verification remain pending.
+
 **0.24.1 published 2026-10-05 (Europe/Vienna):**
 [GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.24.1),
 source `2a8733af7fe14f6179a6d034db56ece351ac9f2e`.

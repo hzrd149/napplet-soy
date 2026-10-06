@@ -25,6 +25,12 @@ Gallery/detail/featured/comment creator labels link to profiles. Saved accounts
 show names and avatars with the npub as their identifying tooltip. Profile lookups
 are direct relay reads, batched (32 keys, two queries at a time) and cached for a
 minute in this browser. SSR retains a separate bounded latest-profile cache.
+The expanded default network uses Soy plus six public relays, including five
+that supplied the reported creator's signed metadata in the 2026-10-06 review.
+Server-side profile reads now use up to eight configured destinations, matching
+the browser settings limit. Explicit custom networks remain authoritative; new
+defaults require deployment, and existing creator projects keep saved relay lists.
+See [relay defaults and dated verification](RELAY-DEFAULTS.md).
 SSR includes profile text, canonical metadata, and a generated 1200×630 PNG share
 card. The OG renderer receives escaped text, never an arbitrary remote resource.
 

@@ -128,6 +128,104 @@ test('standalone snapshot ancestry never joins its parent social thread', async 
     expect(socialView(own, [comment], new Map([[snapshot.id, snapshot]])).comments).toHaveLength(1);
   }
 });
+test('NIP-22 comments and replies accept profile mentions without changing their parent author', async () => {
+  const old = await manifest(),
+    current = await manifest('first', now - 50),
+    scope = socialScope(current);
+  const root = finalizeEvent(
+    {
+      kind: 1111,
+      created_at: now - 10,
+      content: 'A comment mentioning another player',
+      tags: [
+        ['A', scope.key, 'wss://example.com'],
+        ['K', '35129'],
+        ['P', old.pubkey],
+        ['a', scope.key],
+        ['e', old.id],
+        ['k', '35129'],
+        ['p', getPublicKey(bob)],
+        ['p', old.pubkey],
+      ],
+    },
+    alice,
+  );
+  const reply = finalizeEvent(
+    {
+      kind: 1111,
+      created_at: now - 9,
+      content: 'A reply mentioning the creator',
+      tags: [
+        ['A', scope.key],
+        ['K', '35129'],
+        ['P', old.pubkey],
+        ['e', root.id, '', root.pubkey],
+        ['k', '1111'],
+        ['p', root.pubkey],
+        ['p', old.pubkey],
+      ],
+    },
+    bob,
+  );
+  const map = new Map([[current.id, current]]);
+  const like = finalizeEvent(commentLikeTemplate(reply, now - 8), alice);
+  const view = socialView(scope, [root, reply, like], map);
+  expect(view.comments.map((e) => e.id)).toEqual([root.id, reply.id]);
+  expect(view.comments[1].parent).toBe(root.id);
+  expect(view.comments[1].likeCount).toBe(1);
+  for (const event of [root, reply]) {
+    const expectedAuthor = event.id === root.id ? old.pubkey : root.pubkey;
+    const missingParentAuthor = finalizeEvent(
+      { ...event, tags: event.tags.filter((t) => t[0] !== 'p' || t[1] !== expectedAuthor) },
+      bob,
+    );
+    expect(
+      socialView(scope, [root, missingParentAuthor], map).comments.some(
+        (e) => e.id === missingParentAuthor.id,
+      ),
+    ).toBe(false);
+  }
+});
+test('NIP-22 writers distinguish napplet roots and comment parents in every current manifest kind', async () => {
+  const named = await manifest();
+  const root = finalizeEvent(
+    { kind: 15129, created_at: now - 50, content: '', tags: [['x', 'b'.repeat(64)]] },
+    author,
+  );
+  const snapshot = finalizeEvent(
+    {
+      kind: 5129,
+      created_at: now - 50,
+      content: '',
+      tags: [
+        ['x', 'b'.repeat(64)],
+        ['a', socialScope(named).key],
+      ],
+    },
+    author,
+  );
+  for (const manifest of [named, root, snapshot]) {
+    const scope = socialScope(manifest);
+    const content = '**literal text** <b>literal text</b>';
+    const top = finalizeEvent(commentTemplate(scope, content, undefined, now - 10), alice);
+    const reply = commentTemplate(scope, 'reply', top, now - 9);
+    for (const comment of [top, reply]) {
+      expect(comment.kind).toBe(1111);
+      expect(comment.tags).toContainEqual([scope.address ? 'A' : 'E', scope.key]);
+      expect(comment.tags).toContainEqual(['K', String(manifest.kind)]);
+      expect(comment.tags).toContainEqual(['P', manifest.pubkey]);
+    }
+    expect(top.content).toBe(content);
+    expect(top.tags).toContainEqual([scope.address ? 'a' : 'e', scope.key]);
+    expect(top.tags).toContainEqual(['e', manifest.id]);
+    expect(top.tags).toContainEqual(['k', String(manifest.kind)]);
+    expect(top.tags).toContainEqual(['p', manifest.pubkey]);
+    expect(reply.tags).toContainEqual(['e', top.id, '', top.pubkey]);
+    expect(reply.tags).toContainEqual(['k', '1111']);
+    expect(reply.tags).toContainEqual(['p', top.pubkey]);
+    expect(reply.tags.some((t) => t[0] === 'a')).toBe(false);
+  }
+});
 test('social service requires relay acknowledgements, retries exact events and persists per-thread metadata', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'space-social-'));
   const store = new CommunityStore(dir);
