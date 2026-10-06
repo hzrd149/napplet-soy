@@ -7,6 +7,7 @@ import { validateManifest } from '../../protocol/src/manifest';
 import { missingDomains } from '../../runtime/src/capabilities';
 import { cachedPreviewSchema } from '../../protocol/src/preview';
 import { manifestTopics } from '../../protocol/src/topics';
+import { resolvedIconUrl } from '../../client/src/manifest-icon';
 export { default as DEFAULT_PUBLIC_RELAYS } from '../../nostr/discovery-relays.json';
 
 export const PUBLIC_CACHE_TTL = 15 * 60 * 1000;
@@ -23,8 +24,22 @@ export const publicNappletSchema = z.object({
   pubkey: hex,
   topics: z.array(z.string().max(256)).max(32).catch([]).default([]),
   revisionId: hex,
+  // Earliest signed publication observed for this identity; presentation only.
+  firstPublishedAt: z.number().int().nonnegative().optional(),
   artifactHash: hex,
   aggregateHash: hex,
+  format: z.enum(['legacy', 'standalone']).optional(),
+  identityHash: hex.optional(),
+  optionalDomains: z.array(z.string()).max(256).optional(),
+  archetypes: z.array(z.string()).max(256).optional(),
+  intents: z
+    .array(z.object({ intent: z.string(), parameters: z.array(z.string()) }))
+    .max(256)
+    .optional(),
+  icon: z
+    .object({ hash: hex, mime: z.enum(['image/png', 'image/jpeg', 'image/webp']) })
+    .nullable()
+    .optional(),
   naddr: z.string().max(4096).nullable(),
   bytes: z.number().int().min(0).max(MAX_ARTIFACT_BYTES).nullable(),
   domains: z.array(z.string()).max(256),
@@ -64,13 +79,19 @@ export async function publicNapplet(
     manifest: event,
     slug: release.identity?.identifier ?? event.id,
     title: (tag('title') || release.identity?.identifier || 'Untitled napplet').slice(0, 160),
-    description: (tag('description') ?? '').slice(0, 1000),
+    description: release.description.slice(0, 1000),
     creator: `${pub.slice(0, 16)}…${pub.slice(-6)}`,
     pubkey: event.pubkey,
     topics: manifestTopics(event),
     revisionId: event.id,
     artifactHash: release.artifactHash,
     aggregateHash: release.aggregateHash,
+    format: release.format,
+    identityHash: release.identityHash,
+    optionalDomains: release.optionalDomains,
+    archetypes: release.archetypes,
+    intents: release.intents,
+    icon: release.icon,
     naddr: release.identity ? encodeAddress(release.identity, relayHints.slice(0, 8)) : null,
     bytes: null,
     domains: release.domains,
@@ -82,11 +103,16 @@ export async function publicNapplet(
   };
 }
 export const hasPublicPreview = (entry: PublicNapplet) =>
-  !!entry.preview || linkedMedia(entry.manifest, entry.metadata ?? []).images.length > 0;
+  !!entry.preview ||
+  !!resolvedIconUrl(entry.revisionId) ||
+  linkedMedia(entry.manifest, entry.metadata ?? []).images.length > 0;
 export const publicPoster = (entry: PublicNapplet) =>
   entry.preview
-    ? entry.preview.url
+    ? entry.preview.descriptor.id === entry.manifest.id
+      ? (resolvedIconUrl(entry.revisionId) ?? `/api/previews/${entry.revisionId}`)
+      : entry.preview.url
     : (linkedMedia(entry.manifest, entry.metadata ?? []).images[0] ??
+      resolvedIconUrl(entry.revisionId) ??
       `/api/og/${entry.revisionId}?v=${OG_VERSION}`);
 export const publicLink = (entry: PublicNapplet) =>
   entry.naddr

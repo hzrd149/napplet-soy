@@ -57,6 +57,9 @@ test('preserves the upstream project and skill bodies with only the documented i
     'src/styles.css',
     'docs/design-patterns.md',
     'docs/authoring-checklist.md',
+    'docs/nip-5d.md',
+    'docs/package-surfaces.md',
+    'vite.config.ts',
   ]);
   for (const [path, original] of Object.entries(boilerplate.files))
     if (!adapted.has(path)) expect(files[path], path).toBe(original);
@@ -80,6 +83,7 @@ test('preserves the upstream project and skill bodies with only the documented i
     'napplet-test',
     'napplet-sdk',
     'napplet-port',
+    'napplet-interop',
   ]);
   const installed = creatorSkills();
   for (const [path, body] of Object.entries(skills.files))
@@ -89,6 +93,25 @@ test('preserves the upstream project and skill bodies with only the documented i
       else expect(installed[`.agents/${path}`]).toBe(body);
     }
   expect(installed['docs/napplet-skills-LICENSE.txt']).toBe(skills.files.LICENSE);
+});
+test('generated manifest guidance uses standalone authoring and preserves the pinned vendor and build API', () => {
+  const files = { ...boilerplateFiles('new-manifest'), ...creatorSkills() };
+  expect(files['docs/napplet-manifest.md']).toContain('4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51');
+  expect(files['docs/nip-5d.md']).toContain('docs/napplet-manifest.md');
+  expect(files['vite.config.ts']).toContain('nip5aManifest({');
+  for (const path of [
+    'README.md',
+    'docs/package-surfaces.md',
+    '.agents/skills/napplet-build/SKILL.md',
+    '.agents/skills/napplet-test/SKILL.md',
+  ]) {
+    expect(files[path], path).not.toMatch(
+      /aggregate hash lands|Confirm NIP-5A|recomputes the NIP-5A|That file uses NIP-5D kinds with the NIP-5A/,
+    );
+  }
+  for (const name of ['napplet-make', 'napplet-sdk', 'napplet-test', 'napplet-interop'])
+    expect(files[`.agents/skills/${name}/SKILL.md`]).toContain('docs/napplet-manifest.md');
+  expect(boilerplate.files['docs/package-surfaces.md']).toContain('the NIP-5A aggregate');
 });
 
 test('assembled authoring guidance chooses scene and UI direction without conflicting host-color mandates', () => {

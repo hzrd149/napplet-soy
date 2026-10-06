@@ -22,6 +22,7 @@ import { StarterCommand } from '@/components/starter-command';
 import { SoyliBenefits, SoyliIdentity } from '@/components/soyli-intro';
 import { siteHead } from '@/lib/site-head';
 import { CollaborationStory } from '@/components/collaboration-story';
+import { GalleryFilters } from '@/components/gallery-filters';
 
 export const Route = createFileRoute('/')({
   validateSearch: (input: SearchSchemaInput & Partial<GallerySearch>) =>
@@ -47,12 +48,22 @@ function Gallery() {
     seedCatalog([...initial.featured, ...initial.napplets]);
   }
   const refresh = useProtocolRefresh(
-    'gallery',
-    () => queryCatalog(),
+    `gallery:${JSON.stringify([search.archetype, search.intent, search.requiredDomain, search.optionalDomain])}`,
+    () => queryCatalog(undefined, search),
     () => setRefreshVersion((value) => value + 1),
   );
-  const { napplets, topics, total, unavailableCount, status, page, pages, matches, featured } =
-    refreshVersion ? browseProtocol(search) : initial;
+  const {
+    napplets,
+    topics,
+    discovery,
+    total,
+    unavailableCount,
+    status,
+    page,
+    pages,
+    matches,
+    featured,
+  } = refreshVersion ? browseProtocol(search) : initial;
   const [showAllTags, setShowAllTags] = useState(false);
   const [active, setActive] = useState<string | null>(null);
   const [lookupError, setLookupError] = useState('');
@@ -61,7 +72,17 @@ function Gallery() {
     void navigate({ search: (prev) => ({ ...prev, page: 1, ...patch }), resetScroll: false });
   useEffect(
     () => setActive(null),
-    [search.q, search.tag, search.sort, search.page, search.unavailable],
+    [
+      search.q,
+      search.tag,
+      search.sort,
+      search.page,
+      search.unavailable,
+      search.archetype,
+      search.intent,
+      search.requiredDomain,
+      search.optionalDomain,
+    ],
   );
   const visibleTopics = topics.slice(0, 5);
   if (search.tag && !visibleTopics.some(({ topic }) => topic === search.tag))
@@ -193,107 +214,114 @@ function Gallery() {
             Surprise me
           </Button>
         </div>
-        <div className="gallery-tools">
-          <div className="topic-tabs" role="group" aria-label="Filter by tag">
-            <button
-              disabled={!ready}
-              aria-pressed={!search.tag}
-              className={!search.tag ? 'selected' : ''}
-              onClick={() => update({ tag: '' })}
-            >
-              <Sparkles size={14} /> Everything <span className="topic-count">{total}</span>
-            </button>
-            {visibleTopics.map(tagButton)}
-            {topics.length > 5 && (
-              <button
-                disabled={!ready}
-                aria-expanded={showAllTags}
-                aria-controls="all-topics"
-                onClick={() => setShowAllTags(!showAllTags)}
-              >
-                {showAllTags ? 'Fewer tags' : 'More tags'}
-              </button>
-            )}
-          </div>
-          <div className="search-sort">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const value = String(new FormData(e.currentTarget).get('q') ?? '').trim();
-                setLookupError('');
-                if (/^(nostr:|naddr1|note1|nevent1|https?:\/\/)/i.test(value)) {
-                  try {
-                    void navigate({ to: discoveryTarget(value).path });
-                  } catch {
-                    setLookupError('Paste a napplet naddr or a portable napplet link.');
-                  }
-                } else update({ q: value.slice(0, 100) });
-              }}
-              className="search-field"
-            >
-              <Search size={15} />
-              <input
-                aria-label="Search napplets"
-                name="q"
-                placeholder="Search or paste a napplet link…"
-                maxLength={4096}
-                defaultValue={search.q}
-                key={search.q}
-              />
-              {search.q && (
-                <button type="button" aria-label="Clear search" onClick={() => update({ q: '' })}>
-                  <X size={13} />
-                </button>
-              )}
-            </form>
-            <select
-              disabled={!ready}
-              aria-label="Sort napplets"
-              value={search.sort === 'curated' ? 'new' : search.sort}
-              onChange={(e) => update({ sort: e.target.value as GallerySearch['sort'] })}
-            >
-              <option value="new">Newest</option>
-              <option value="featured">Featured</option>
-            </select>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="availability-toggle"
-            disabled={!ready}
-            aria-pressed={search.unavailable === true}
-            title="Include napplets that need more capabilities or whose download is unavailable"
-            onClick={() => update({ unavailable: search.unavailable ? undefined : true })}
-          >
-            <Eye size={14} />
-            Show unavailable
-            {unavailableCount > 0 && <span>({unavailableCount})</span>}
-          </Button>
-        </div>
-        {showAllTags && (
-          <div className="topic-panel" id="all-topics">
-            <p>
-              Tags from creators{' '}
-              <span>Pick a topic to explore. Creations without tags stay in Everything.</span>
-            </p>
-            <div className="topic-tabs" role="group" aria-label="More tags">
-              {topics
-                .filter(({ topic }) => !visibleTopics.some((t) => t.topic === topic))
-                .map(tagButton)}
-            </div>
-          </div>
-        )}
-        {lookupError && <p role="alert">{lookupError}</p>}
         <SocialRankings active={active} setActive={setActive} />
         <section id="napplets" className="napplet-collection" aria-labelledby="collection-heading">
           <h3 id="collection-heading" className="collection-heading">
-            {search.q || search.tag
+            {search.q ||
+            search.tag ||
+            search.archetype ||
+            search.intent ||
+            search.requiredDomain ||
+            search.optionalDomain
               ? 'Matching napplets'
               : search.sort === 'featured'
                 ? 'Featured napplets'
                 : 'All napplets'}
             <span>{matches}</span>
           </h3>
+          <div className="gallery-tools">
+            <div className="topic-tabs" role="group" aria-label="Filter by tag">
+              <button
+                disabled={!ready}
+                aria-pressed={!search.tag}
+                className={!search.tag ? 'selected' : ''}
+                onClick={() => update({ tag: '' })}
+              >
+                <Sparkles size={14} /> Everything <span className="topic-count">{total}</span>
+              </button>
+              {visibleTopics.map(tagButton)}
+              {topics.length > 5 && (
+                <button
+                  disabled={!ready}
+                  aria-expanded={showAllTags}
+                  aria-controls="all-topics"
+                  onClick={() => setShowAllTags(!showAllTags)}
+                >
+                  {showAllTags ? 'Fewer tags' : 'More tags'}
+                </button>
+              )}
+            </div>
+            <div className="search-sort">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const value = String(new FormData(e.currentTarget).get('q') ?? '').trim();
+                  setLookupError('');
+                  if (/^(nostr:|naddr1|note1|nevent1|https?:\/\/)/i.test(value)) {
+                    try {
+                      void navigate({ to: discoveryTarget(value).path });
+                    } catch {
+                      setLookupError('Paste a napplet naddr or a portable napplet link.');
+                    }
+                  } else update({ q: value.slice(0, 100) });
+                }}
+                className="search-field"
+              >
+                <Search size={15} />
+                <input
+                  aria-label="Search napplets"
+                  name="q"
+                  placeholder="Search or paste a napplet link…"
+                  maxLength={4096}
+                  defaultValue={search.q}
+                  key={search.q}
+                />
+                {search.q && (
+                  <button type="button" aria-label="Clear search" onClick={() => update({ q: '' })}>
+                    <X size={13} />
+                  </button>
+                )}
+              </form>
+              <select
+                disabled={!ready}
+                aria-label="Sort napplets"
+                value={search.sort === 'curated' ? 'new' : search.sort}
+                onChange={(e) => update({ sort: e.target.value as GallerySearch['sort'] })}
+              >
+                <option value="new">Newest</option>
+                <option value="updated">Recently updated</option>
+                <option value="featured">Featured</option>
+              </select>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="availability-toggle"
+              disabled={!ready}
+              aria-pressed={search.unavailable === true}
+              title="Include napplets that need more capabilities or whose download is unavailable"
+              onClick={() => update({ unavailable: search.unavailable ? undefined : true })}
+            >
+              <Eye size={14} />
+              Show unavailable
+              {unavailableCount > 0 && <span>({unavailableCount})</span>}
+            </Button>
+          </div>
+          <GalleryFilters search={search} facets={discovery} disabled={!ready} update={update} />
+          {showAllTags && (
+            <div className="topic-panel" id="all-topics">
+              <p>
+                Tags from creators{' '}
+                <span>Pick a topic to explore. Creations without tags stay in Everything.</span>
+              </p>
+              <div className="topic-tabs" role="group" aria-label="More tags">
+                {topics
+                  .filter(({ topic }) => !visibleTopics.some((t) => t.topic === topic))
+                  .map(tagButton)}
+              </div>
+            </div>
+          )}
+          {lookupError && <p role="alert">{lookupError}</p>}
           <div className="napplet-grid">
             {napplets.map((n, index) => (
               <NappletCard
@@ -355,8 +383,20 @@ function Gallery() {
                     ? 'Featured napplets are selected by the site administrator. Explore Newest to see the whole playground.'
                     : 'Try a different word or open up the filters.'}
               </p>
-              <Button variant="outline" onClick={() => update({ q: '', tag: '' })}>
-                Clear search and tag
+              <Button
+                variant="outline"
+                onClick={() =>
+                  update({
+                    q: '',
+                    tag: '',
+                    archetype: undefined,
+                    intent: undefined,
+                    requiredDomain: undefined,
+                    optionalDomain: undefined,
+                  })
+                }
+              >
+                Clear search and filters
               </Button>
             </div>
           )}

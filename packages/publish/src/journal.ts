@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { eventSchema } from '../../protocol/src';
 import { remixSchema } from '../../protocol/src/remix';
 import type { Network } from '../../identity/src/signer';
-import { PublishError, targetsSchema } from './config';
+import { PublishError, targetsSchema, intentSchema } from './config';
 import { MAX_SOURCE_FILES, MAX_PUBLICATION_JOURNAL_BYTES } from './limits';
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
@@ -47,6 +47,23 @@ const planSchema = z
       .max(40 * 1024 * 1024),
     sourceCommit: commit,
     remix: remixSchema.optional(),
+    manifestFormat: z.literal('standalone').optional(),
+    optionalDomains: z.array(z.string().max(40)).max(32).optional(),
+    archetypes: z.array(z.string().max(80)).max(32).optional(),
+    intents: z.array(intentSchema).max(32).optional(),
+    icon: z
+      .object({
+        file: z.string().max(200),
+        hash,
+        bytes: z
+          .number()
+          .int()
+          .positive()
+          .max(5 * 1024 * 1024),
+        mime: z.enum(['image/png', 'image/jpeg', 'image/webp']),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export const jobSchema = z
@@ -105,6 +122,7 @@ export const jobSchema = z
         assets: z.record(hash, z.boolean()).optional(),
         preview: z.boolean().optional(),
         video: z.boolean().optional(),
+        icon: z.boolean().optional(),
         descriptor: z.boolean().optional(),
         source: z.boolean(),
         artifact: z.boolean(),
@@ -159,7 +177,8 @@ export const jobSchema = z
   .refine(
     (job) =>
       job.status !== 'announced_pending_index' ||
-      ((!job.video || (!!job.preview && job.receipts.video === true)) &&
+      ((!job.plan.icon || job.receipts.icon === true) &&
+        (!job.video || (!!job.preview && job.receipts.video === true)) &&
         (!!job.source || !!job.repository) &&
         !!job.current &&
         !!job.snapshot &&

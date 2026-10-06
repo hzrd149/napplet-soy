@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { PrivateKeySigner } from 'applesauce-signers';
+import { repositoryRef } from '../../collaboration/src/protocol';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,6 +9,7 @@ import { diagnose } from '../../diagnostics/src';
 import { sourceGit } from '../../grasp/src/client';
 import type { SignedEvent } from '../../protocol/src';
 import {
+  loadRepository,
   gitNostrRemotes,
   selectRepository,
   verifyReleaseReachable,
@@ -140,4 +143,62 @@ test('the release commit must be in a signed ref that a clone URL serves', async
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('bare repository addresses and unhinted naddr discover the signed repository on configured relays', async () => {
+  const signer = new PrivateKeySigner();
+  const pubkey = await signer.getPublicKey();
+  const relay = 'wss://repo.example/';
+  const announcement = await signer.signEvent({
+    kind: 30617,
+    created_at: 1,
+    content: '',
+    tags: [
+      ['d', 'game'],
+      ['relays', relay],
+      ['clone', 'https://repo.example/game.git'],
+    ],
+  });
+  const state = await signer.signEvent({
+    kind: 30618,
+    created_at: 2,
+    content: '',
+    tags: [
+      ['d', 'game'],
+      ['refs/heads/main', 'a'.repeat(40)],
+    ],
+  });
+  const asked: string[] = [];
+  const latest = async (url: string, _key: string, _id: string, kind: number) => {
+    asked.push(url);
+    return url === relay ? (kind === 30617 ? announcement : state) : null;
+  };
+  for (const reference of [
+    `30617:${pubkey}:game`,
+    nip19.naddrEncode({ kind: 30617, pubkey, identifier: 'game' }),
+  ]) {
+    const loaded = await loadRepository(
+      latest,
+      { ...repositoryRef(reference), origin: 'publish.repository' },
+      false,
+      ['ws://127.0.0.1:9999', relay],
+    );
+    expect(loaded.repository.address).toBe(`30617:${pubkey}:game`);
+    expect(loaded.repository.relays).toEqual([relay]);
+    expect(loaded.state?.id).toBe(state.id);
+  }
+  expect(asked).not.toContain('ws://127.0.0.1:9999');
+  // Explicit hints do not silently fall back to a different relay.
+  await expect(
+    loadRepository(
+      latest,
+      {
+        ...repositoryRef(`30617:${pubkey}:game`),
+        origin: 'publish.repository',
+        relays: ['wss://elsewhere.example/'],
+      },
+      false,
+      [relay],
+    ),
+  ).rejects.toMatchObject({ code: 'REPOSITORY_UNAVAILABLE' });
 });

@@ -110,6 +110,14 @@ export function setupListing(signal: AbortSignal) {
       ['Source / Git', data.targets.grasp],
       ['Website', data.targets.site],
       ['Required capabilities', data.runtime.requires.join(', ') || 'None'],
+      ['Optional capabilities', data.runtime.optionalDomains.join(', ') || 'None'],
+      ['Archetypes', data.discovery.archetypes.join(', ') || 'None'],
+      [
+        'Accepted intents',
+        data.discovery.intents.map((i) => [i.intent, ...i.parameters].join(' ')).join('\n') ||
+          'None',
+      ],
+      ['Icon', data.discovery.icon?.file ?? 'Generic artwork'],
       [
         'User settings',
         data.runtime.configuration

@@ -1,4 +1,4 @@
-import { buildGenealogy } from '../../../../packages/client/src/genealogy';
+import { buildGenealogy, hasAncestry } from '../../../../packages/client/src/genealogy';
 import { findManifest } from '@/lib/protocol-catalog';
 import { manifestAllowed, blocked } from '@/lib/network';
 import { useEffect, useState } from 'react';
@@ -8,9 +8,7 @@ import { CreatorLink } from './creator-link';
 import type { SignedEvent } from '../../../../packages/protocol/src';
 import type { Genealogy as Tree } from '../../../../packages/backend/src/genealogy';
 export function Genealogy({ manifest }: { manifest: SignedEvent }) {
-  const hasParents = manifest.tags.some(
-    (t) => t[0] === 'A' || t[0] === 'remix-version' || (t[0] === 'a' && manifest.kind !== 5129),
-  );
+  const hasParents = hasAncestry(manifest);
   const [tree, setTree] = useState<Tree | null>(null),
     [error, setError] = useState(''),
     [attempt, setAttempt] = useState(0);

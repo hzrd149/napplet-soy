@@ -145,11 +145,18 @@ Missing, unsupported, stale or inaccessible attachments do not hide a valid prop
 
 Bounds: up to 100 recent proposal roots plus an explicitly requested root, and 500
 related events per query; current Git profile
-supports 1,024 regular source files, 40 MiB of reachable blobs and 10,000 reachable objects.
-The file count is a tooling safety budget, not a Nostr quota. Current source and
-archives require regular files; safe historical aliases to public regular files
-inside the same committed tree may remain after replacement or removal at HEAD.
-Unsafe links, submodules, credential files and Git attributes/modules remain blocked.
+supports 1,024 source files, 40 MiB of reachable blobs and 10,000 reachable objects.
+The file count is a tooling safety budget, not a Nostr quota. Current and historical
+Git trees may retain safe relative aliases to public regular files inside the same
+committed tree. Git-based remixes preserve those links; the source archive and
+archive-based remixes contain regular copies of their exact committed target bytes.
+Copies count toward the 40 MiB expanded-source budget. No history rewrite or
+replacement at HEAD is needed for safe aliases.
+Unsafe links, submodules, credential files and Git attributes/modules remain blocked. Before
+merging a reviewed proposal, soyLI validates the predicted merged tree as well as
+the proposed history. A merge that would remove an alias's target is refused
+before a reachable merge commit is created; the diagnostic identifies the source
+problem and leaves the working tree unchanged.
 Playable previews use the 25 MiB HTML limit; the public website, indexer and runtime
 must deploy that limit before admitting larger artifacts. Managed resources still
 have their separate 10 MiB limit. Git-backed automatic setup/build/publish currently

@@ -12,6 +12,7 @@ import {
 } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { z } from 'zod';
+import { legacySnapshotAddress } from '../../protocol/src/manifest';
 import { normalizeTarget, ruleTypes, type RuleType } from './targets';
 export { normalizeTarget, ruleTypes, type RuleType } from './targets';
 
@@ -128,16 +129,8 @@ export function manifestBlocked(event: {
     )
   )
     return true;
-  if (
-    event.kind === 5129 &&
-    event.tags.some(
-      (t) =>
-        t[0] === 'a' &&
-        (t[1]?.startsWith(`35129:${event.pubkey}:`) || t[1] === `15129:${event.pubkey}:`) &&
-        blocked('address', t[1]),
-    )
-  )
-    return true;
+  const snapshotAddress = legacySnapshotAddress(event);
+  if (snapshotAddress && blocked('address', snapshotAddress)) return true;
   return event.tags.some(
     (t) =>
       (t[0] === 'path' && !!t[2] && blocked('hash', t[2])) ||
@@ -168,14 +161,7 @@ export function manifestFeatured(event: {
   return readPolicy().featured.some((item) =>
     item.type === 'event'
       ? item.target === event.id
-      : item.target === address ||
-        (event.kind === 5129 &&
-          event.tags.some(
-            (t) =>
-              t[0] === 'a' &&
-              t[1] === item.target &&
-              (t[1].startsWith(`35129:${event.pubkey}:`) || t[1] === `15129:${event.pubkey}:`),
-          )),
+      : item.target === address || item.target === legacySnapshotAddress(event),
   );
 }
 export const actionSchema = z

@@ -60,13 +60,14 @@ export async function resolveZapEndpoint(
   pubkey: string,
   events: SignedEvent[],
   load: JsonLoader = loadJson,
+  signal?: AbortSignal,
 ): Promise<ZapEndpoint> {
   const profile = events
     .filter((e) => e.kind === 0 && e.pubkey === pubkey && allowedSocial(e))
     .sort((a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id))[0];
   if (!profile) throw new CommunityError('The author’s Lightning profile is unavailable.', 404);
   const url = endpointUrl(verifiedEvent(profile)),
-    data = await load(url);
+    data = await load(url, signal);
   if (
     data.tag !== 'payRequest' ||
     data.allowsNostr !== true ||

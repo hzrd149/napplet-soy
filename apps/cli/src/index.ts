@@ -1,3 +1,4 @@
+import { migrateCommand } from './migrate';
 import { lifecycleCommand } from './lifecycle';
 import { diagnose, formatDiagnostic } from '../../../packages/diagnostics/src';
 import { publishFromProject, proposeFromProject } from './share-project';
@@ -82,6 +83,7 @@ Usage:
   bun run soyli publish [--project <folder>] [--dry-run | --resume]
   bun run soyli unpublish|republish|delete [--project <folder>] [--dry-run | --confirm <token> | --resume]
   bun run soyli lifecycle [--project <folder>]
+  bun run soyli migrate <napplet-link-or-naddr> [--relay <url>] [--dry-run | --confirm <token> | --resume]
   bun run soyli status [--project <folder>] [--refresh]
   bun run soyli dev [--project <folder>] [--port 4173] [--no-open]
   bun run soyli check [--project <folder>]
@@ -349,6 +351,34 @@ try {
       json,
       signal: controller.signal,
       accounts,
+      onAuth,
+    });
+    process.exit(process.exitCode ?? 0);
+  }
+  if (command === 'migrate') {
+    const allowed = new Set(['network', 'json', 'dry-run', 'resume', 'confirm', 'relay', 'mirror']);
+    if (
+      !action ||
+      argument ||
+      extra.length ||
+      (values['dry-run'] && (values.resume || values.confirm)) ||
+      Object.entries(values).some(([key, value]) => value !== undefined && !allowed.has(key))
+    )
+      throw new AccountError(
+        'USAGE',
+        'Use migrate <napplet-link-or-naddr> [--relay url] [--dry-run | --confirm token | --resume].',
+      );
+    await migrateCommand({
+      reference: action,
+      network,
+      accounts,
+      primary: values.relay,
+      mirrors: values.mirror,
+      dryRun: values['dry-run'],
+      confirm: values.confirm,
+      resume: values.resume,
+      json,
+      signal: controller.signal,
       onAuth,
     });
     process.exit(process.exitCode ?? 0);
@@ -880,7 +910,7 @@ try {
       );
     else {
       console.log(
-        `${result.unchanged ? 'Existing publication' : 'Publication'}: ${result.status}\nSource commit: ${result.sourceCommit}\nNapplet: ${result.naddr}\nSnapshot: ${result.snapshotId ?? 'pending'}\n${result.websiteReady ? `Website confirmed at ${new Date(result.websiteCheckedAt!).toISOString()}: ${result.url}\nPinned snapshot: ${result.snapshotUrl}` : `Website ${result.websiteStatus}; the route is not yet confirmed: ${result.url}`}`,
+        `${result.unchanged ? 'Existing publication' : 'Publication'}: ${result.status}\nSource commit: ${result.sourceCommit}\nNapplet: ${result.naddr}\nSnapshot: ${result.snapshotId ?? 'pending'}\n${result.websiteReady ? `Website confirmed at ${new Date(result.websiteCheckedAt!).toISOString()}: ${result.url}\nPinned version: ${result.snapshotUrl}` : `Website ${result.websiteStatus}; the route is not yet confirmed: ${result.url}`}`,
       );
       if (result.preview)
         console.log(

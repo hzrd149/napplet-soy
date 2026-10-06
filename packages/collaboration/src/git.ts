@@ -98,13 +98,26 @@ export async function mergeReviewed(
     author?: string;
   },
 ) {
+  const author: Record<string, string> = input.author
+    ? {
+        GIT_AUTHOR_NAME: input.author,
+        GIT_AUTHOR_EMAIL: `${input.author}@nostr`,
+        GIT_COMMITTER_NAME: input.author,
+        GIT_COMMITTER_EMAIL: `${input.author}@nostr`,
+      }
+    : {};
   const current = await committedSource(directory);
   if (current !== input.target)
     throw new Error('The target branch changed since review. Refresh and review the new target.');
   await fetchCommit(directory, input.clones, input.head, input.local);
   await inspectHistory(directory, input.head);
   // Preflight in the object database. A conflict never leaves the working tree half-merged.
-  await sourceGit(directory, ['merge-tree', '--write-tree', current, input.head]).catch((cause) => {
+  const mergedTree = await sourceGit(directory, [
+    'merge-tree',
+    '--write-tree',
+    current,
+    input.head,
+  ]).catch((cause) => {
     const conflicts = cause instanceof DiagnosticError && cause.context.exitCode === 1;
     throw new DiagnosticError(
       conflicts ? 'GIT_MERGE_CONFLICT' : 'GIT_MERGE_CHECK',
@@ -119,6 +132,40 @@ export async function mergeReviewed(
       },
     );
   });
+  try {
+    if (!commitPattern.test(mergedTree)) throw new Error('Git returned an invalid merged tree.');
+    // Two valid branches can combine into a dangling or otherwise unsafe alias.
+    // Inspect the actual merged tree before writing a reachable merge commit.
+    // This preview object has no ref and is never part of published history.
+    const preview = await sourceGit(
+      directory,
+      [
+        '-c',
+        'commit.gpgsign=false',
+        'commit-tree',
+        mergedTree,
+        '-p',
+        current,
+        '-p',
+        input.head,
+        '-m',
+        'soyLI source validation preview (unreferenced)',
+      ],
+      author,
+    );
+    await inspectHistory(directory, preview);
+  } catch (cause) {
+    throw new DiagnosticError(
+      'GIT_MERGE_SOURCE',
+      'The merged source did not pass publication checks. Your working tree is unchanged.',
+      {
+        operation: 'validate merged public source',
+        cause,
+        recovery:
+          'Resolve the reported source problem on the proposal or target branch, then refresh the review and retry. A file alias may need its target restored or the alias removed. No merge commit was added to either branch; the validation preview is unreferenced.',
+      },
+    );
+  }
   if ((await committedSource(directory)) !== current)
     throw new Error('The target changed during preparation.');
   await sourceGit(
@@ -133,14 +180,7 @@ export async function mergeReviewed(
       `Merge proposal ${input.revision}`,
       input.head,
     ],
-    input.author
-      ? {
-          GIT_AUTHOR_NAME: input.author,
-          GIT_AUTHOR_EMAIL: `${input.author}@nostr`,
-          GIT_COMMITTER_NAME: input.author,
-          GIT_COMMITTER_EMAIL: `${input.author}@nostr`,
-        }
-      : {},
+    author,
   );
   return {
     state: 'merged_locally' as const,

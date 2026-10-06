@@ -314,3 +314,258 @@ test('deleting a napplet keeps the creator’s own source repository but lists t
   expect(retained.world).toBeUndefined();
   expect(retained.SuperSonicRCRevive).toContain('Your own source repository is kept');
 });
+
+test('standalone lifecycle scopes never delete same-author parents and inventory raw HTML/icon hashes', async () => {
+  const f = await fixture();
+  const icon = 'c'.repeat(64);
+  const snapshot = await f.sign({
+    kind: 5129,
+    created_at: f.current.created_at + 1,
+    content: 'Standalone remix',
+    tags: [
+      ['x', f.hash],
+      ['icon', icon, 'image/png'],
+      ['server', 'https://blossom.example'],
+      ['a', nappletKey(f.current)],
+    ],
+  });
+  for (const rows of f.events.values()) rows.push(snapshot);
+  expect(nappletKey(snapshot)).toBe(snapshot.id);
+  const plan = await planLifecycle({ manifest: snapshot, relays: f.relays, io: f.io });
+  expect(plan.manifests.map((e) => e.id)).toEqual([snapshot.id]);
+  expect(plan.blobs.find((blob) => blob.hash === f.hash)?.retained).toContain('another napplet');
+  expect(plan.blobs.find((blob) => blob.hash === icon)?.labels).toEqual(['Icon']);
+  const receipt = createLifecycleReceipt(plan, 'unpublish');
+  await executeLifecycle(receipt, { io: f.io, signer: f.signer, save: f.save });
+  expect(f.events.get(f.relays[0])!.some((event) => event.id === f.current.id)).toBe(true);
+  expect(f.events.get(f.relays[0])!.some((event) => event.id === f.snapshot.id)).toBe(true);
+  expect(f.events.get(f.relays[0])!.some((event) => event.id === snapshot.id)).toBe(false);
+  const namedPlan = await f.plan();
+  expect(namedPlan.manifests.some((event) => event.id === snapshot.id)).toBe(false);
+});
+
+test('standalone named publications unpublish and republish their original format and preserve independent snapshots', async () => {
+  const f = await fixture();
+  const current = await f.sign({
+    kind: 35129,
+    created_at: f.current.created_at,
+    content: 'Raw-hash creation',
+    tags: [
+      ['d', 'world'],
+      ['x', f.hash],
+      ['server', 'https://blossom.example'],
+      ['O', 'connect'],
+    ],
+  });
+  const snapshot = await f.sign({
+    ...current,
+    kind: 5129,
+    content: 'An independently published snapshot',
+    tags: current.tags.filter((t) => t[0] !== 'd'),
+  });
+  for (const relay of f.relays) f.events.set(relay, [current, snapshot]);
+  const plan = await planLifecycle({ manifest: current, relays: f.relays, io: f.io });
+  expect(plan.manifests.map((e) => e.id)).toEqual([current.id]);
+  expect(plan.blobs[0].hash).toBe(f.hash);
+  expect(plan.blobs[0].retained).toContain('another napplet');
+  const unpublish = createLifecycleReceipt(plan, 'unpublish');
+  await executeLifecycle(unpublish, { io: f.io, signer: f.signer, save: f.save });
+  expect(f.events.get(f.relays[0])!.some((e) => e.id === snapshot.id)).toBe(true);
+  const republish = createLifecycleReceipt(plan, 'republish');
+  await executeLifecycle(republish, { io: f.io, signer: f.signer, save: f.save });
+  expect(lifecycleFinished(republish)).toBe(true);
+  expect(republish.events.listing.content).toBe(current.content);
+  expect(republish.events.listing.tags).toEqual(current.tags);
+});
+
+test('explicit verified publication pairs include exact snapshots only in the deletion inventory and survive recovery', async () => {
+  const f = await fixture();
+  const current = await f.sign({
+    kind: 35129,
+    created_at: f.current.created_at,
+    content: 'Raw-hash creation',
+    tags: [
+      ['d', 'world'],
+      ['x', f.hash],
+      ['server', 'https://blossom.example'],
+    ],
+  });
+  const snapshot = await f.sign({
+    ...current,
+    kind: 5129,
+    tags: current.tags.filter((t) => t[0] !== 'd'),
+  });
+  const other = await f.sign({ ...snapshot, content: 'Separate snapshot with shared bytes' });
+  for (const relay of f.relays) f.events.set(relay, [current, snapshot, other]);
+  const plan = await planLifecycle({
+    manifest: current,
+    relays: f.relays,
+    io: f.io,
+    snapshotPairs: [{ current, snapshot }],
+  });
+  expect(plan.manifests.map((e) => e.id).sort()).toEqual([current.id, snapshot.id].sort());
+  expect(plan.blobs[0].retained).toContain('another napplet');
+  expect(nappletKey(snapshot)).toBe(snapshot.id);
+  const receipt = parseReceipt(
+    JSON.parse(JSON.stringify(createLifecycleReceipt(plan, 'unpublish'))),
+  );
+  await executeLifecycle(receipt, { io: f.io, signer: f.signer, save: f.save });
+  expect(f.events.get(f.relays[0])!.some((e) => e.id === current.id || e.id === snapshot.id)).toBe(
+    false,
+  );
+  expect(f.events.get(f.relays[0])!.some((e) => e.id === other.id)).toBe(true);
+  await expect(
+    planLifecycle({
+      manifest: current,
+      relays: f.relays,
+      io: f.io,
+      snapshotPairs: [{ current, snapshot: other }],
+    }),
+  ).rejects.toThrow('Release metadata mismatch');
+  const altered = createLifecycleReceipt(plan, 'unpublish');
+  altered.plan = {
+    ...altered.plan,
+    manifests: [current, other],
+    snapshotPairs: [{ current: current.id, snapshot: other.id }],
+  };
+  const writes = f.writes.length;
+  await expect(
+    executeLifecycle(parseReceipt(altered), { io: f.io, signer: f.signer, save: f.save }),
+  ).rejects.toThrow('Release metadata mismatch');
+  expect(f.writes).toHaveLength(writes);
+});
+
+test('fresh inventory discovers exact same-author pairs and retains snapshots matched only by bytes, ancestry or time', async () => {
+  const f = await fixture();
+  const current = await f.sign({
+    kind: 35129,
+    created_at: f.current.created_at,
+    content: 'Current description',
+    tags: [
+      ['d', 'world'],
+      ['x', f.hash],
+      ['server', 'https://blossom.example'],
+    ],
+  });
+  const snapshot = await f.sign({
+    ...current,
+    kind: 5129,
+    tags: current.tags.filter((tag) => tag[0] !== 'd'),
+  });
+  const changedTime = await f.sign({ ...snapshot, created_at: snapshot.created_at - 1 });
+  const changedDescription = await f.sign({
+    ...snapshot,
+    content: 'Independent description',
+    tags: [...snapshot.tags, ['a', nappletKey(current)]],
+  });
+  for (const relay of f.relays)
+    f.events.set(relay, [current, snapshot, changedTime, changedDescription]);
+  const plan = await planLifecycle({
+    manifest: current,
+    relays: f.relays,
+    io: f.io,
+    operation: 'unpublish',
+  });
+  expect(plan.snapshotPairs).toEqual([{ current: current.id, snapshot: snapshot.id }]);
+  expect(plan.manifests.map((event) => event.id).sort()).toEqual([current.id, snapshot.id].sort());
+  expect(f.writes).toHaveLength(0);
+  const receipt = parseReceipt(createLifecycleReceipt(plan, 'unpublish'));
+  await executeLifecycle(receipt, { io: f.io, signer: f.signer, save: f.save });
+  expect(receipt.events.deletion.tags).toContainEqual(['e', snapshot.id]);
+  expect(
+    f.events
+      .get(f.relays[0])!
+      .filter((event) => event.kind === 5129)
+      .map((event) => event.id)
+      .sort(),
+  ).toEqual([changedTime.id, changedDescription.id].sort());
+});
+
+test('retained signed revisions select historical pairs even when the relay pruned their named events', async () => {
+  const f = await fixture();
+  const old = await f.sign({
+    kind: 35129,
+    created_at: f.current.created_at - 1,
+    content: 'Previous description',
+    tags: [
+      ['d', 'world'],
+      ['x', f.hash],
+      ['server', 'https://blossom.example'],
+    ],
+  });
+  const oldSnapshot = await f.sign({
+    ...old,
+    kind: 5129,
+    tags: old.tags.filter((tag) => tag[0] !== 'd'),
+  });
+  const current = await f.sign({
+    ...old,
+    created_at: f.current.created_at,
+    content: 'Current description',
+  });
+  const snapshot = await f.sign({
+    ...current,
+    kind: 5129,
+    tags: current.tags.filter((tag) => tag[0] !== 'd'),
+  });
+  for (const relay of f.relays) f.events.set(relay, [current, snapshot, oldSnapshot]);
+  const noHistory = await planLifecycle({
+    manifest: current,
+    relays: f.relays,
+    io: f.io,
+    operation: 'unpublish',
+  });
+  expect(noHistory.manifests.some((event) => event.id === oldSnapshot.id)).toBe(false);
+  const plan = await planLifecycle({
+    manifest: current,
+    relays: f.relays,
+    io: f.io,
+    operation: 'unpublish',
+    history: {
+      manifests: [old, oldSnapshot],
+      complete: true,
+      warnings: ['Retained history only.'],
+    },
+  });
+  expect(plan.snapshotPairs).toContainEqual({ current: old.id, snapshot: oldSnapshot.id });
+  expect(plan.manifests.map((event) => event.id).sort()).toEqual(
+    [old.id, oldSnapshot.id, current.id, snapshot.id].sort(),
+  );
+  const receipt = createLifecycleReceipt(plan, 'unpublish');
+  await executeLifecycle(receipt, { io: f.io, signer: f.signer, save: f.save });
+  expect(receipt.events.deletion.tags).toContainEqual(['e', old.id]);
+  expect(receipt.events.deletion.tags).toContainEqual(['e', oldSnapshot.id]);
+  expect(f.events.get(f.relays[0])!.filter((event) => [35129, 5129].includes(event.kind))).toEqual(
+    [],
+  );
+});
+
+test('deletion retains a linked repository whose identifier equals the napplet, in shell and journal plans', async () => {
+  const f = await fixture();
+  const address = `30617:${f.author}:world`;
+  const source = `nostr://${nip19.npubEncode(f.author)}/${encodeURIComponent('wss://git.example/')}/world`;
+  const manifest = await f.sign({
+    ...f.current,
+    tags: [...f.current.tags, ['source', source], ['soy-source-repository', address, 'linked']],
+  });
+  for (const rows of f.events.values()) rows.push(manifest);
+  const plan = await planLifecycle({ manifest, relays: f.relays, io: f.io });
+  expect(plan.repositories).toHaveLength(1);
+  expect(plan.repositories[0].retained).toContain('Your own source repository is kept');
+  const receipt = createLifecycleReceipt(plan, 'delete');
+  await executeLifecycle(receipt, { signer: f.signer, io: f.io, save: async () => {} });
+  expect(receipt.events.deletion.tags).not.toContainEqual(['a', address]);
+  const repositorySteps = receipt.steps.filter((s) => s.id.startsWith('repo:'));
+  expect(repositorySteps).toHaveLength(1);
+  expect(repositorySteps[0].state).toBe('retained');
+
+  // Previously signed releases are also protected by the local job record.
+  const old = await f.sign({ ...f.current, tags: [...f.current.tags, ['source', source]] });
+  const journalPlan = await planLifecycle({
+    manifest: old,
+    relays: f.relays,
+    io: f.io,
+    retainedRepositories: [address],
+  });
+  expect(journalPlan.repositories.every((repo) => !!repo.retained)).toBe(true);
+});

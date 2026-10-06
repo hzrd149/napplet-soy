@@ -64,15 +64,22 @@ reports an actionable conflict. `soyli dev --port 0` asks the OS for a free port
 this also works in 0.14.1. Existing previews are not stopped or replaced.
 
 The manager edits portable
-name/title, description, tags and license in `napplet.json`; destinations go into
+name/title, description, tags and license in `napplet.json`. Its **Capabilities and
+discovery** section edits required/optional domains, archetypes, accepted intent
+parameters and the optional local icon. Destinations go into
 the existing ignored `.napplet-space/project.json` binding. Identity and upstream
 association are preserved. Reload before saving if an agent edited the files.
 
 Import and preview assets, edit attribution, choose embedded or external storage,
 select earlier covers/clips and inspect Git changes. Project saves do not commit or publish.
 The agent uses the same services with `soyli assets list|add|remove|sync` and
-`soyli project show|set <json-file>`; the latter accepts all five editable metadata
-fields (`name`, `title`, `description`, `topics`, `license`). See [assets](ASSETS.md).
+`soyli project show|set <json-file>`; the latter requires a flat JSON object with all
+five editable metadata fields (`name`, `title`, `description`, `topics`, `license`), plus optional
+`requires`, `optionalDomains`, `archetypes`, `intents` and `icon`. Omitted optional
+fields are preserved; empty lists or `icon: null` clear them. Extract the `project`
+object from `project show`; do not pass its outer envelope or a partial metadata
+excerpt. The command supplies the edit revision. See
+[manifest authoring](NIP5D-CREATOR.md) and [assets](ASSETS.md).
 
 Listing's **Play in a capture window first** opens a fresh interactive Chromium
 session of the current build. Play until a useful moment, then capture or record.
@@ -373,11 +380,20 @@ before using Git history-filtering tools in a separate copy. Recheck the result
 with dry-run. soyLI never silently rewrites history or force-pushes it; existing
 public copies cannot be recalled by a local rewrite.
 
-Safe file aliases from older commits may remain once removed or replaced with
-regular files in the current tree. Each historical symlink must resolve to a public
-regular file inside that same committed tree; absolute, escaping, dangling, cyclic,
-directory and private links still fail. Replace a current safe alias, review and
-commit the change, then retry dry-run. That case does not require a history rewrite.
+Safe relative source aliases such as `CLAUDE.md -> AGENTS.md` can remain in both
+current and historical Git trees. Each must resolve to a public regular file inside
+that same tree; working files must also stay within the selected source. Chains
+and relative parent paths are supported when they stay inside the project.
+Absolute, escaping, dangling, cyclic, directory, private and unselected targets
+still fail. Target contents pass the same credential checks as ordinary source.
+
+`soyli checkpoint` preserves the link. Publishing and Git-based remixes preserve
+Git history and symlinks; the downloadable source archive stores each alias as a
+regular copy of its exact committed target bytes. Archive-based remixes receive
+those regular copies. Alias copies count toward the source size and file limits.
+No replacement at HEAD or history rewrite is needed for a safe alias. Project
+configuration, playable artifacts, managed assets, presentation files and backend
+build inputs still require regular files.
 
 Inspection is bounded to 10,000 reachable objects, 10,000 distinct historical
 blob/path pairs and 40 MiB of unique blob content. Each historical path is checked,
@@ -476,7 +492,7 @@ excluding ignored dependencies and private state. The selected budget is **1,024
 files / 40 MiB**, including built HTML and preview files; the source tar stays capped
 at 50 MiB. The file count is a tooling safety budget, not a Nostr quota. Playable
 HTML is limited to **25 MiB**; managed assets and host resources retain their
-separate 10 MiB limits. Current source files must be regular files and pass credential checks.
+separate 10 MiB limits. Source files and safe relative file aliases must pass credential checks.
 `publish.files` adds release inputs; it cannot exclude tracked files or committed
 history. Do not enumerate tracked files to reduce the selection: Git already finds
 them, and the complete `napplet.json` remains capped at 16 KiB.
@@ -726,3 +742,20 @@ separate unencrypted, owner-only account store outside Git. See
 [the development file vault instructions](IDENTITY.md#explicit-dangerous-development-file-vault)
 for setup, restoring an existing identity and returning to Keychain. This requires
 a CLI release containing the option; 0.12.0 does not support it.
+
+### Manifest-only migration (0.24.0)
+
+```sh
+soyli migrate 'https://napplet.soy/n/<naddr>' --dry-run --json
+soyli migrate 'https://napplet.soy/n/<naddr>' --confirm '<confirmation>'
+# If delivery was interrupted, reuse the saved event:
+soyli migrate 'https://napplet.soy/n/<naddr>' --resume --confirm '<confirmation>'
+```
+
+Select the original author with `account use` before confirming. No original
+project, build tools or uploads are needed; dry run does not open the signer.
+Use `--relay` for a different primary relay and repeated `--mirror` options for
+additional copies. Plans and receipts live outside Git beside account state.
+Named/root addresses and exact HTML are preserved. Snapshots remain unchanged.
+See [creator migration contract](NIP5D-CREATOR.md#upgrade-an-existing-publication-without-rebuilding-it)
+for concurrency, unavailable history, retries and optional metadata behavior.

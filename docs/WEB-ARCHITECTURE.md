@@ -63,8 +63,8 @@ Isomorphic route loaders resolve identifiers from validated SQLite projections d
 | `/@alice/plasma-pet/remixes`                                       | Remix lineage and descendants                                                 |
 | `/n/<naddr>`                                                       | Portable identity route, following its current release                        |
 | `/n/<naddr>/source`                                                | Equivalent source view without a site handle                                  |
-| `/r/<snapshot-event-id>`                                           | Exact immutable release                                                       |
-| `/r/<snapshot-event-id>/source`                                    | Exact source revision of that release                                         |
+| `/r/<manifest-event-id>`                                           | Exact signed revision of any supported manifest kind                          |
+| `/r/<manifest-event-id>/source`                                    | Exact source revision of that release                                         |
 | `/n/<naddr>/play`, `/r/<event-id>/play`, `/@alice/plasma-pet/play` | Immersive presentation of the same identity/release; deployed 2026-09-14      |
 | `/settings`                                                        | Creator/account preferences                                                   |
 | `/about`                                                           | Server-rendered guide, stack and resources; deployed 2026-09-14               |
@@ -117,9 +117,9 @@ This registry is operated by napplet.space. It is not a global Nostr naming stan
 
 Named and `/n/` routes both resolve directly. Use the current primary named URL as the page's SEO canonical when one exists; otherwise use the normalized `/n/` URL. The portable address route remains usable without an alias redirect. Pinned release pages use `/r/` as their own canonical and never redirect to the current release.
 
-Share offers the friendly link, the portable Nostr address, and an exact-version link. Copying a Remix command always resolves to the release being displayed. Social counts, saves, and permissions use protocol identity rather than the URL that led to the page.
+Share offers the friendly link, the portable Nostr address, and an exact-version link. Copying a Remix command always resolves to the release being displayed. Social counts, saves, and permissions use protocol identity rather than the URL that led to the page. With the standalone manifest migration, soyLI pins the signed named revision itself to preserve its address-based integrations. The index retains observed replaced revisions and verifies them under the same rules as current releases. New snapshot ancestry never borrows the named app's identity; old snapshot links retain their legacy behavior. See [NIP5D-MIGRATION.md](NIP5D-MIGRATION.md).
 
-The running player's Source action links to `/r/<displayed-snapshot>/source`, so an intervening publication cannot switch the inspected source. A direct request to a named `/source` route resolves current once and redirects to the corresponding pinned source view. This also prevents parallel nested loaders from accidentally selecting different current releases.
+The running player's Source action links to `/r/<displayed-manifest-id>/source`, so an intervening publication cannot switch the inspected source. A direct request to a named `/source` route resolves current once and redirects to the corresponding pinned source view. This also prevents parallel nested loaders from accidentally selecting different current releases.
 
 Start with ordinary gallery-to-detail navigation, intent-based metadata prefetch, and scroll restoration. Prefetch does not execute a napplet. The detail route owns one player; child tabs can reuse it. Expand the player through presentation state without replacing its iframe. An optional `?view=fullscreen` represents an expanded layout, while the browser Fullscreen API still requires a user gesture. Use browser history so Back/Escape behave predictably; only intercept Escape when the player controls that presentation mode.
 

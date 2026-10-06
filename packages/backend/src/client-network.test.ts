@@ -20,5 +20,9 @@ test('development can keep its configured local relay and an unconfigured client
   ]);
   expect(browserRelayDefaults([])).toEqual(['wss://relay.napplet.soy', ...discoveryRelays]);
   expect(browserRelayDefaults([])).not.toContain('wss://relay.damus.io');
+  expect(browserRelayDefaults([])).not.toContain('wss://relay.pocketstr.com');
   expect(new Set(browserRelayDefaults([])).size).toBe(browserRelayDefaults([]).length);
+  expect(browserRelayDefaults([])).toHaveLength(7);
+  for (const relay of ['wss://relay.nos.social', 'wss://relay.nostr.net', 'wss://nostr.oxtr.dev'])
+    expect(browserRelayDefaults([])).toContain(relay);
 });

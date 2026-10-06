@@ -81,9 +81,32 @@ export { validateRelease } from './manifest';
 
 export const gallerySearchSchema = z.object({
   tag: z.string().max(256).transform(normalizeTopic).catch(''),
-  sort: z.enum(['curated', 'new', 'featured']).catch('new'),
+  sort: z.enum(['curated', 'new', 'updated', 'featured']).catch('new'),
   q: z.string().max(100).catch(''),
   unavailable: z.boolean().optional().catch(undefined),
   page: z.coerce.number().int().min(1).max(1000).optional().catch(undefined),
+  archetype: z
+    .string()
+    .trim()
+    .max(256)
+    .regex(/^[^\u0000-\u001f\u007f]*$/)
+    .optional()
+    .catch(undefined),
+  intent: z
+    .string()
+    .max(1024)
+    .regex(/^[a-zA-Z][a-zA-Z0-9+.-]*:[^\s?#\u0000-\u001f\u007f]+$/)
+    .optional()
+    .catch(undefined),
+  requiredDomain: z
+    .string()
+    .regex(/^[a-z][a-z0-9-]{0,39}$/)
+    .optional()
+    .catch(undefined),
+  optionalDomain: z
+    .string()
+    .regex(/^[a-z][a-z0-9-]{0,39}$/)
+    .optional()
+    .catch(undefined),
 });
 export type GallerySearch = z.infer<typeof gallerySearchSchema>;

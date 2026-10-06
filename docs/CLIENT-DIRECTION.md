@@ -8,7 +8,7 @@ several former conformance gaps have since been implemented.
 
 ## Authoritative contracts
 
-The [NIP-5D proposal at 24711d9](https://github.com/dskvr/nips/blob/24711d9c47bbdd07908bf1d52bf677d9cbc530f0/5D.md) is our authoritative web projection, regardless of upstream merge status. The [NAP registry at a040914](https://github.com/napplet/naps/tree/a040914b4bbd3a5cd8a14b0f316a723c968ebfb2) supplies capability contracts; NIP-5A supplies referenced manifest rules. Record these revisions together and review upstream changes deliberately. An SDK or another client is implementation evidence, not authority to override the contract.
+The [NIP-5D PR 7 at 4d0fb2e](https://github.com/dskvr/nips/blob/4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51/5D.md) is our authoritative web projection, regardless of upstream merge status. The [NAP registry at a040914](https://github.com/napplet/naps/tree/a040914b4bbd3a5cd8a14b0f316a723c968ebfb2) supplies capability contracts; NIP-5D now owns the standalone manifest; old path/aggregate manifests remain readable. NIP-5A still supplies referenced source/optional descriptor conventions. See [the migration](NIP5D-MIGRATION.md). Record these revisions together and review upstream changes deliberately. An SDK or another client is implementation evidence, not authority to override the contract.
 
 The registry currently contains SHELL, IDENTITY, THEME, INC, and INTENT. Our other domains use pinned upstream implementation bindings; their exact operation contracts need a conformance inventory. The website uses @napplet/shim 0.30.0 with nap/core 0.32.0 and supplements it with the mandatory SHELL handshake.
 
@@ -75,17 +75,17 @@ Direct browser-to-relay/Blossom delivery can run in the trusted host with the sa
 
 This is a source review of selected contracts, not an exhaustive conformance result.
 
-| Area | Current code | Assessment |
-| --- | --- | --- |
-| Website loading | Correct napplet kinds, single `/index.html`, signatures/hashes, opaque `srcdoc`, source-bound messages | Core path follows the selected design. Single-file packaging and isolation are requirements, not deviations. |
-| Unknown messages | Explicit request dispatch ignores unknown domains/actions before quotas or side effects | Fixed; recognized policy-denied operations retain error responses. |
-| CLI preview | Standalone bundles use the shared verifier, `srcdoc`, pinned shim, SHELL, host and resource responder | Fixed for local authoring. Editable local source is the authority; published manifests still require signature verification. |
-| Identity relay list | Latest verified user NIP-65 event supplies read/write preferences | Fixed; returned preferences are subject to the shared public runtime read policy. Guest/missing records return an empty map. |
-| Identity changes | Existing frames receive `identity.changed`; account-scoped services are replaced | Fixed; pending replies, prompts, resources, subscriptions and exports cannot cross into the new account. |
-| Optional domains | INC/INTENT/CVM and other domains absent; extended identity/fs operations missing | Coverage gaps. Absent optional domains alone do not violate the web projection; advertised domains still need operation-level conformance. |
-| Writes/resources | Known writes denied; bounded HTTPS/MIME/byte/time/relay policy | Deliberate host restrictions. Verify denial/error semantics rather than advertising complete operation support. |
-| Theme | Fixed theme with required color fields | Allowed by NAP-THEME; add push updates when theme switching exists. |
-| Source/discovery | HTTPS source links only; bounded startup catalog and no arbitrary uncached naddr resolution | Missing `nostr://` source resolution and general on-demand discovery. |
-| Publication | Fixtures remain unpublished; CLI publication and independent-client acceptance absent | Incomplete authoring path; prove the ordinary relay/Blossom round trip in another host. |
+| Area                | Current code                                                                                           | Assessment                                                                                                                                 |
+| ------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Website loading     | Correct napplet kinds, single `/index.html`, signatures/hashes, opaque `srcdoc`, source-bound messages | Core path follows the selected design. Single-file packaging and isolation are requirements, not deviations.                               |
+| Unknown messages    | Explicit request dispatch ignores unknown domains/actions before quotas or side effects                | Fixed; recognized policy-denied operations retain error responses.                                                                         |
+| CLI preview         | Standalone bundles use the shared verifier, `srcdoc`, pinned shim, SHELL, host and resource responder  | Fixed for local authoring. Editable local source is the authority; published manifests still require signature verification.               |
+| Identity relay list | Latest verified user NIP-65 event supplies read/write preferences                                      | Fixed; returned preferences are subject to the shared public runtime read policy. Guest/missing records return an empty map.               |
+| Identity changes    | Existing frames receive `identity.changed`; account-scoped services are replaced                       | Fixed; pending replies, prompts, resources, subscriptions and exports cannot cross into the new account.                                   |
+| Optional domains    | INC/INTENT/CVM and other domains absent; extended identity/fs operations missing                       | Coverage gaps. Absent optional domains alone do not violate the web projection; advertised domains still need operation-level conformance. |
+| Writes/resources    | Known writes denied; bounded HTTPS/MIME/byte/time/relay policy                                         | Deliberate host restrictions. Verify denial/error semantics rather than advertising complete operation support.                            |
+| Theme               | Fixed theme with required color fields                                                                 | Allowed by NAP-THEME; add push updates when theme switching exists.                                                                        |
+| Source/discovery    | HTTPS source links only; bounded startup catalog and no arbitrary uncached naddr resolution            | Missing `nostr://` source resolution and general on-demand discovery.                                                                      |
+| Publication         | Fixtures remain unpublished; CLI publication and independent-client acceptance absent                  | Incomplete authoring path; prove the ordinary relay/Blossom round trip in another host.                                                    |
 
 The four focused web/CLI contract repairs are implemented. Next integrate the local Khatru/LMDB/Bleve, Blossom, and GRASP publish path. Preserve the flavor interface in that design; defer arbitrary flavor execution and video workers until the creation loop works.

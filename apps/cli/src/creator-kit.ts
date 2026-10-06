@@ -11,6 +11,7 @@ import wasmGuide from '../../../docs/WASM.md' with { type: 'text' };
 import visualGuide from '../../../docs/VISUAL-DESIGN.md' with { type: 'text' };
 import { adaptVisualBoilerplate, adaptVisualSkill } from './creator-visuals';
 import { adaptToolingBoilerplate, adaptToolingSkill } from './creator-tooling';
+import { adaptManifestBoilerplate, adaptManifestSkill, manifestGuide } from './creator-manifest';
 import rustBridge from '../support/napplet.rs' with { type: 'text' };
 import bevyAssets from '../support/napplet_bevy.rs' with { type: 'text' };
 // Distinct module identity keeps Bun's raw-source cache separate from executable imports.
@@ -35,7 +36,10 @@ const profile = `# napplet soyLI integration
 
 This project includes the pinned napplet/boilerplate and napplet-* skills with
 documented soyLI authoring adaptations. Start with napplet-make. Protocol guidance
-stays upstream; this note maps tooling commands to the installed napplet soyLI.
+follows the selected upstream draft in docs/napplet-manifest.md; this note maps
+tooling commands to the installed napplet soyLI. Read that guide before editing
+capabilities, intents, archetypes or icon metadata. Fresh publications use the
+standalone NIP-5D shape; earlier signed napplets remain readable.
 
 Before styling, read docs/napplet-visual-design.md. Choose a visual direction for
 the main experience AND its UI/HUD; record it in the project brief. Starter colors,
@@ -63,6 +67,8 @@ and report missing coverage honestly. Never invent a portrait recording option.
 - soyli dev watches the selected build inside the napplet.soy sandbox (Vite by default).
   Use its URL for preview. The upstream pnpm dev URL serves source without a host.
   Manage project edits name/title, description, tags/license, destinations and assets.
+  Capabilities and discovery also edits required/optional domains, archetypes,
+  accepted intent parameters and a local icon; changes are saved to napplet.json.
   Its Changes tab reviews files and saves explicit local Git checkpoints; Proposals
   publishes/reviews playable contributions and merges locally. Publish reviews the
   creator, destinations and checked cover/clip before an explicit release.
@@ -274,10 +280,15 @@ must deploy the 25 MiB artifact limit before admitting HTML above 10 MiB; a CLI
 update alone does not update them or an older website's source-browser file cap.
 publish.files only adds release inputs; it cannot narrow tracked source or history.
 Tracked files need no explicit list, and napplet.json stays limited to 16 KiB.
-Current source must use regular files. Safe internal file aliases may remain in
-older commits once removed or replaced at HEAD: each must resolve to a public
-regular file in that same committed tree. Absolute, escaping, dangling, cyclic,
-directory and private links remain blocked. A safe old alias needs no history rewrite.
+Safe relative source aliases such as CLAUDE.md -> AGENTS.md may remain in current
+and historical Git trees. Each must resolve to a public regular file in the same
+tree and selected source; target contents pass the same credential checks.
+Checkpoint, publication and Git remixes preserve links and history. Downloadable
+source archives and archive remixes use regular copies of exact committed target
+bytes; copies count toward source limits. No replacement or history rewrite is
+needed for a safe alias. Absolute, escaping, dangling, cyclic, directory, private
+and unselected targets remain blocked. Configuration, playable artifacts, managed
+assets, presentation files and backend build inputs must still be regular files.
 
 One remix supports both paths, in either order:
 - soyli publish releases your own version under its local publication identity.
@@ -393,6 +404,9 @@ For Vite projects, keep hard domain requirements in vite.config.ts; the publishe
 napplet-requires metadata and checks it against this host. Optional domains must
 degrade gracefully, following upstream guidance. Use the injected namespace and
 SDK; do not add a bootstrap or a private protocol extension to app code.
+Local requires becomes signed R; optionalDomains becomes O. Archetypes, intents
+and icon metadata are configured in napplet.json, not inferred from starter code.
+See docs/napplet-manifest.md. The plugin's optional legacy event is not published.
 Rust projects declare requirements in napplet.json.requires, use the same injected
 namespace through docs/examples/napplet.rs and follow docs/napplet-wasm.md. Their
 Cargo tests/build and soyli check replace TypeScript-only package scripts; do not
@@ -491,7 +505,9 @@ this integration note, agent entry pointers, private-state gitignore entries, a
 static settings example and its main.ts import, opt-in host colors in main.ts,
 and a CSS header explaining the demo's replaceable styling. Generated authoring
 docs and skills replace uniform density/whole-surface host-matching mandates with
-project-specific visual direction for content and UI. Protocol APIs are unchanged.
+project-specific visual direction for content and UI. Generated manifest guidance
+is adapted to the selected standalone NIP-5D draft; vendor snapshots stay intact.
+NAP message APIs and the pinned build plugin are unchanged.
 Installed skill folders are excluded from the boilerplate's repository-guidance
 scan; the schema-free-starter assertion checks our static settings example instead.
 Run
@@ -522,6 +538,7 @@ export function creatorSkills() {
     'docs/napplet-mobile.md': mobileGuide,
     'docs/napplet-wasm.md': wasmGuide,
     'docs/napplet-visual-design.md': visualGuide,
+    'docs/napplet-manifest.md': manifestGuide,
     'docs/examples/napplet.rs': rustBridge,
     'docs/examples/napplet_bevy.rs': bevyAssets,
     'docs/examples/gamepad.ts': gamepadHelper,
@@ -533,7 +550,7 @@ export function creatorSkills() {
   };
   for (const [path, text] of Object.entries(skills.files)) {
     if (!path.startsWith('skills/')) continue;
-    const adapted = adaptToolingSkill(path, adaptVisualSkill(path, text));
+    const adapted = adaptManifestSkill(path, adaptToolingSkill(path, adaptVisualSkill(path, text)));
     for (const agent of ['.agents', '.claude']) files[`${agent}/${path}`] = adapted;
   }
   return files;
@@ -543,7 +560,10 @@ export function boilerplateFiles(name: string) {
   const files: Record<string, string> = Object.fromEntries(
     Object.entries(boilerplate.files).map(([path, text]) => [
       path,
-      adaptToolingBoilerplate(path, adaptVisualBoilerplate(path, text)),
+      adaptManifestBoilerplate(
+        path,
+        adaptToolingBoilerplate(path, adaptVisualBoilerplate(path, text)),
+      ),
     ]),
   );
   files['package.json'] =

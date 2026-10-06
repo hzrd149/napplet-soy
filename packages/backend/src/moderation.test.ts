@@ -170,6 +170,15 @@ test('Featured is empty by default, signed and independent of blocks; address se
   expect(readPolicy().rules).toHaveLength(0);
   expect(manifestFeatured({ ...fixture.current, id: 'a'.repeat(64) })).toBe(true);
   expect(manifestFeatured(fixture.snapshot)).toBe(true);
+  expect(
+    manifestFeatured({
+      ...fixture.snapshot,
+      tags: [
+        ['x', fixture.artifactHash],
+        ['a', `35129:${fixture.pubkey}:${fixture.identifier}`],
+      ],
+    }),
+  ).toBe(false);
   expect(manifestFeatured({ ...fixture.snapshot, pubkey: await outsider.getPublicKey() })).toBe(
     false,
   );
@@ -236,6 +245,15 @@ test('author and hash rules apply to new manifests, snapshot links are author-bo
     'd'.repeat(64),
   );
   updatePolicy(action(), actor, 'e'.repeat(64));
+  expect(
+    manifestBlocked({
+      ...fixture.snapshot,
+      tags: [
+        ['x', fixture.artifactHash],
+        ['a', `35129:${fixture.pubkey}:${fixture.identifier}`],
+      ],
+    }),
+  ).toBe(false);
   expect(manifestBlocked({ ...fixture.snapshot, pubkey: await outsider.getPublicKey() })).toBe(
     false,
   );
@@ -412,6 +430,43 @@ test('authorized administration searches known blocked entries without exposing 
     data.catalog.entries[0].hashes.some((f: { hash: string }) => f.hash === fixture.artifactHash),
   ).toBe(true);
   expect(data.rules[0].target).toBe(data.catalog.entries[0].address);
+});
+
+test('administration exposes raw artifact targets for all standalone manifest kinds and can block them', async () => {
+  const { IndexStore } = await import('./index-store');
+  process.env.SPACE_INDEX_DIR = join(directory, 'index');
+  const index = new IndexStore(process.env.SPACE_INDEX_DIR, true);
+  const hash = 'b'.repeat(64);
+  const manifests = await Promise.all(
+    [35129, 15129, 5129].map((kind) =>
+      admin.signEvent({
+        kind,
+        created_at: Math.floor(Date.now() / 1000) - 2,
+        content: 'A standalone napplet.',
+        tags: [
+          ...(kind === 35129 ? [['d', 'standalone']] : []),
+          ['title', `Standalone ${kind}`],
+          ['x', hash],
+        ],
+      }),
+    ),
+  );
+  for (const event of manifests) expect(index.admit(event)).toBe(true);
+  index.close();
+  const data = await (await adminResponse(request(await signed()))).json();
+  for (const event of manifests) {
+    const entry = data.catalog.entries.find((e: { id: string }) => e.id === event.id);
+    expect(entry?.hashes).toEqual([{ hash, label: '/index.html' }]);
+  }
+  const body = JSON.stringify({
+    action: 'block',
+    type: 'hash',
+    target: hash,
+    reason: 'Reviewed artifact',
+    revision: 0,
+  });
+  expect((await adminResponse(request(await signed(body), body))).status).toBe(200);
+  for (const event of manifests) expect(manifestBlocked(event)).toBe(true);
 });
 
 test('signed backend grants reload immediately, preserve worlds on revocation, and fail closed', async () => {

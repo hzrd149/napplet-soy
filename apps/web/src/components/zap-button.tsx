@@ -1,5 +1,5 @@
 import { readSocial } from '@/lib/protocol-social';
-import { readProfile } from '@/lib/protocol-catalog';
+import { readAvailableProfile } from '../../../../packages/client/src/social';
 import {
   resolveZapEndpoint,
   requestZapInvoice,
@@ -23,7 +23,7 @@ import {
   DialogTrigger,
 } from './ui/dialog';
 import { signForAccount, signAnonymousZap } from '@/lib/community-client';
-import { protocolClient } from '@/lib/network';
+import { protocolClient, network } from '@/lib/network';
 import { zapTotalsStore, useZapTotals } from '@/lib/zap-totals';
 import type { SignedEvent } from '../../../../packages/protocol/src';
 import type { SocialScope } from '../../../../packages/protocol/src/social';
@@ -93,30 +93,38 @@ export function ZapButton({
         throw new Error(
           'This creation requests split zaps. Use a client supporting its recipient split.',
         );
-      const [{ event }, social] = await Promise.all([
-        readProfile(target.pubkey),
-        readSocial(data.manifest, data.relays, controller.signal),
-      ]);
-      const endpoint = await resolveZapEndpoint(target.pubkey, event ? [event] : []);
-      const context = {
-        ...data,
-        manifest: target,
-        scope: commentTarget ? commentScope(commentTarget) : data.scope,
-      };
-      const targets = commentTarget
-        ? new Map([[commentTarget.id, commentTarget]])
-        : social.manifests;
-      return {
-        endpoint,
-        relays: social.relays,
-        ...(await zapTotals(context, social, endpoint, targets)),
-      };
+      const relays = [...new Set([...network().relays, ...data.relays])].slice(0, 8);
+      const event = await readAvailableProfile(
+        protocolClient(),
+        target.pubkey,
+        relays,
+        controller.signal,
+      );
+      const endpoint = await resolveZapEndpoint(
+        target.pubkey,
+        event ? [event] : [],
+        undefined,
+        controller.signal,
+      );
+      // Receipt totals are independent of preparing a payment. Keep them in the background.
+      void readSocial(data.manifest, data.relays, controller.signal)
+        .then(async (social) => {
+          const context = { ...data, manifest: target, scope };
+          const targets = commentTarget
+            ? new Map([[commentTarget.id, commentTarget]])
+            : social.manifests;
+          const value = await zapTotals(context, social, endpoint, targets);
+          if (!controller.signal.aborted) zapTotalsStore.observe(scope.key, value.receipts);
+        })
+        .catch(() => {
+          /* Existing verified totals survive a failed refresh. */
+        });
+      return { endpoint, relays };
     })()
       .then((value) => {
         if (controller.signal.aborted) return;
         setEndpoint(value.endpoint);
         setRelayHints(value.relays ?? data.relays);
-        zapTotalsStore.observe(scope.key, value.receipts);
         setSats(
           String(
             Math.min(

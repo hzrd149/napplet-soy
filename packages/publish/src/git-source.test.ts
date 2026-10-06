@@ -154,7 +154,7 @@ async function linkedHistory(
   return { root, original, head, close: () => rm(root, { recursive: true, force: true }) };
 }
 
-test('removed in-repository historical file aliases preserve publishable history', async () => {
+test('current and historical in-repository file aliases preserve publishable history', async () => {
   const f = await linkedHistory({
     'CLAUDE.md': 'AGENTS.md',
     'docs/CLAUDE.md': '../AGENTS.md',
@@ -165,12 +165,10 @@ test('removed in-repository historical file aliases preserve publishable history
     expect(await sourceGit(f.root, ['rev-parse', 'HEAD'])).toBe(f.head);
     expect(await sourceGit(f.root, ['rev-list', '--count', 'HEAD'])).toBe('2');
     expect(await sourceGit(f.root, ['status', '--porcelain'])).toBe('');
-    await expect(inspectHistory(f.root, f.original)).rejects.toMatchObject({
-      code: 'SOURCE_PATH',
-      context: {
-        recovery: expect.stringContaining('regular file'),
-      },
-    });
+    const current = await inspectHistory(f.root, f.original);
+    expect(current.aliases).toHaveLength(3);
+    for (const alias of current.aliases)
+      expect(alias).toMatchObject({ target: 'AGENTS.md', executable: false });
   } finally {
     await f.close();
   }

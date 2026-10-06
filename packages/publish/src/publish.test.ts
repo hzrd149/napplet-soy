@@ -1,3 +1,4 @@
+import { migrationTemplate } from '../../migration/src';
 import { descriptorVideos } from '../../protocol/src/preview-video';
 import { importAsset, readAssets, validateAssets } from '../../assets/src';
 import { createRemix } from '../../remix/src';
@@ -15,6 +16,7 @@ import {
   type SignedEvent,
 } from '../../protocol/src';
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
+import { validateManifest } from '../../protocol/src/manifest';
 import { sourceGit, sourceUrls } from '../../grasp/src/client';
 import {
   publishProject as publishCommitted,
@@ -27,6 +29,7 @@ import { projectSchema } from './config';
 import { newer } from './relay';
 import { appReferences, descriptorImages } from '../../protocol/src/preview';
 import { writeBinding } from './binding';
+import { inspectProject } from './project';
 
 // Existing publication cases explicitly checkpoint fixture edits before sharing.
 async function publishProject(options: PublishOptions) {
@@ -437,8 +440,8 @@ test('managed external assets are uploaded before announcement, resume unchanged
     await validateAssets(remix.directory);
     expect(await Bun.file(join(remix.directory, asset.path)).bytes()).toEqual(previewPng);
     const current = job.current!;
-    expect(current.tags).toContainEqual(['requires', 'resource']);
-    expect(current.tags.filter((t) => t[0] === 'path')).toHaveLength(1);
+    expect(current.tags).toContainEqual(['R', 'resource']);
+    expect(current.tags.filter((t) => t[0] === 'path')).toHaveLength(0);
   } finally {
     await f.close();
   }
@@ -627,7 +630,7 @@ test('dry-run inspects explicit source and targets without signing, contacting s
     await f.close();
   }
 });
-test('remix publication preserves standard ancestry while snapshots reference their own napplet', async () => {
+test('standalone remixes keep provenance on snapshots only, never as their own application identity', async () => {
   const f = await fixture();
   try {
     const remix = {
@@ -638,11 +641,8 @@ test('remix publication preserves standard ancestry while snapshots reference th
     await Bun.write(join(f.project, 'napplet.json'), JSON.stringify({ ...f.config, remix }));
     await publishProject(f.options);
     const job = await f.load();
-    expect(job.current!.tags.filter((t) => t[0] === 'a')).toEqual([['a', remix.parent]]);
-    expect(job.current!.tags.filter((t) => t[0] === 'A')).toEqual([['A', remix.origin]]);
-    expect(job.snapshot!.tags.filter((t) => t[0] === 'a')).toEqual([
-      ['a', `35129:${f.creator.pubkey}:${job.plan.identifier}`],
-    ]);
+    expect(job.current!.tags.filter((t) => t[0] === 'a' || t[0] === 'A')).toEqual([]);
+    expect(job.snapshot!.tags.filter((t) => t[0] === 'a')).toEqual([['a', remix.parent]]);
     expect(job.snapshot!.tags.filter((t) => t[0] === 'A')).toEqual([['A', remix.origin]]);
     expect((await publishProject(f.options)).status).toBe('announced_pending_index');
   } finally {
@@ -684,6 +684,12 @@ test('first publish is standard and retry preserves every signed event, artifact
     expect(first.status).toBe('announced_pending_index');
     const job = await f.load();
     const release = await validateRelease(job.current, job.snapshot);
+    expect(release.format).toBe('standalone');
+    expect(job.current!.content).toBe('first creation');
+    expect(
+      job.current!.tags.filter((t) => ['path', 'requires', 'description'].includes(t[0])),
+    ).toEqual([]);
+    expect(job.current!.tags.filter((t) => t[0] === 'x')).toEqual([['x', job.plan.artifactHash]]);
     expect(release.identity.pubkey).toBe(f.creator.pubkey);
     expect(job.current!.tags.filter((t) => t[0] === 't')).toEqual([['t', 'visual']]);
     expect(job.snapshot!.tags.some((t) => t[0] === 'd')).toBe(false);
@@ -703,6 +709,156 @@ test('first publish is standard and retry preserves every signed event, artifact
       websiteReady: false,
     });
     expect(f.writes).toEqual(writes);
+  } finally {
+    await f.close();
+  }
+});
+test('standalone publication retains optional domains, archetypes, intent parameters and uploaded icon through retries and remixes', async () => {
+  const f = await fixture();
+  const parameters = ['track', 'mode', ...Array.from({ length: 12 }, (_, i) => `option${i}`)];
+  try {
+    await Bun.write(join(f.project, 'icon.png'), previewPng);
+    await Bun.write(
+      join(f.project, 'napplet.json'),
+      JSON.stringify({
+        ...f.config,
+        description: 'A track editor. <b>Plain text, not HTML.</b>',
+        requires: ['storage'],
+        optionalDomains: ['storage', 'theme', 'future-domain'],
+        archetypes: ['track', 'editor'],
+        intents: [{ intent: 'napplet:track/edit', parameters }],
+        icon: { file: 'icon.png', mime: 'image/png' },
+      }),
+    );
+    await publishProject(f.options);
+    const job = await f.load();
+    await validateRelease(job.current, job.snapshot);
+    const release = await validateManifest(job.current);
+    expect(release.description).toBe('A track editor. <b>Plain text, not HTML.</b>');
+    expect(release.optionalDomains).toEqual(['theme', 'future-domain']);
+    expect(release.archetypes).toEqual(['track', 'editor']);
+    expect(release.intents).toEqual([{ intent: 'napplet:track/edit', parameters }]);
+    expect(job.current!.tags.find((t) => t[0] === 'i')).toHaveLength(16);
+    expect(release.icon).toEqual({ hash: await sha256(previewPng), mime: 'image/png' });
+    expect(f.blobs.get(release.icon!.hash)).toEqual(previewPng);
+    expect(job.receipts.icon).toBe(true);
+    expect(await publishProject({ ...f.options, resume: true })).toMatchObject({
+      currentId: job.current!.id,
+      snapshotUrl: `${job.plan.targets.site}/r/${job.current!.id}`,
+    });
+    const remix = await createRemix(f.root, 'metadata-remix', {
+      manifest: job.current!,
+      artifact: f.blobs.get(job.plan.artifactHash)!,
+      files: new Map(),
+    });
+    const config = projectSchema.parse(
+      await Bun.file(join(remix.directory, 'napplet.json')).json(),
+    );
+    expect(config.description).toBe(release.description);
+    expect(config.requires).toEqual(['storage']);
+    expect(config.optionalDomains).toEqual(['theme', 'future-domain']);
+    expect(config.archetypes).toEqual(release.archetypes);
+    expect(config.intents).toEqual(release.intents);
+    // An artifact-only remix has no local icon source to falsely claim it retained.
+    expect(config.icon).toBeUndefined();
+  } finally {
+    await f.close();
+  }
+});
+test('pre-migration frozen journals resume the exact legacy events then a fresh publish adopts standalone manifests', async () => {
+  const f = await fixture();
+  try {
+    f.deps.checkpoint = async () => {
+      throw new Error('simulated stop before signing');
+    };
+    await expect(publishProject(f.options)).rejects.toThrow('simulated stop');
+    const prepared = await f.load();
+    const inspected = await inspectProject(
+      join(f.journal.directory(prepared.id), 'files'),
+      'local',
+      f.creator.pubkey,
+      prepared.plan.targets,
+      prepared.commit,
+      prepared.plan.files.map((p) => p.path),
+      'legacy',
+    );
+    prepared.plan = inspected.plan;
+    prepared.fingerprint = inspected.fingerprint;
+    await f.journal.save(prepared);
+    f.deps.checkpoint = async (job) => {
+      if (job.snapshot && job.current) throw new Error('simulated stop after legacy signing');
+    };
+    await expect(publishProject({ ...f.options, resume: true })).rejects.toThrow('simulated stop');
+    const signed = await f.load();
+    expect((await validateRelease(signed.current, signed.snapshot)).format).toBe('legacy');
+    expect(signed.current!.content).toBe('');
+    delete f.deps.checkpoint;
+    await publishProject({ ...f.options, resume: true });
+    const resumed = await f.load();
+    expect(resumed.snapshot).toEqual(signed.snapshot);
+    expect(resumed.current).toEqual(signed.current);
+    // A remote-only, canonical manifest migration must not strand the local
+    // project's otherwise unchanged publication journal.
+    const migrationSigner = await f.accounts.signer();
+    try {
+      const converted = await migrationSigner.signEvent(
+        await migrationTemplate(signed.current!, signed.current!.created_at + 1),
+      );
+      f.record(signed.plan.targets.relay, converted);
+    } finally {
+      await migrationSigner.close();
+    }
+    const migrated = await publishProject(f.options);
+    const fresh = await f.load();
+    expect('currentId' in migrated && migrated.currentId).not.toBe(signed.current!.id);
+    expect((await validateRelease(fresh.current, fresh.snapshot)).format).toBe('standalone');
+    expect(fresh.plan.artifactHash).toBe(signed.plan.artifactHash);
+  } finally {
+    await f.close();
+  }
+});
+test('optional metadata preflight rejects a false icon MIME, query-bearing intent and excessive parameters without remote writes', async () => {
+  const f = await fixture();
+  try {
+    await Bun.write(join(f.project, 'icon.png'), previewPng);
+    await Bun.write(
+      join(f.project, 'napplet.json'),
+      JSON.stringify({
+        ...f.config,
+        icon: { file: 'icon.png', mime: 'image/jpeg' },
+      }),
+    );
+    await expect(publishProject({ ...f.options, dryRun: true })).rejects.toMatchObject({
+      code: 'PROJECT_ICON',
+    });
+    await Bun.write(
+      join(f.project, 'napplet.json'),
+      JSON.stringify({
+        ...f.config,
+        intents: [{ intent: 'napplet:track/edit?track=mine', parameters: [] }],
+      }),
+    );
+    await expect(publishProject({ ...f.options, dryRun: true })).rejects.toMatchObject({
+      code: 'PROJECT_CONFIG',
+    });
+    await Bun.write(
+      join(f.project, 'napplet.json'),
+      JSON.stringify({
+        ...f.config,
+        intents: [
+          {
+            intent: 'napplet:track/edit',
+            parameters: Array.from({ length: 15 }, (_, i) => `option${i}`),
+          },
+        ],
+      }),
+    );
+    await expect(publishProject({ ...f.options, dryRun: true })).rejects.toMatchObject({
+      code: 'PROJECT_CONFIG',
+      message: expect.stringContaining('at most 14 parameter names'),
+    });
+    expect(f.writes).toHaveLength(0);
+    expect(await publicationStatus(f.project, 'local')).toEqual({ status: 'not_started' });
   } finally {
     await f.close();
   }
@@ -730,9 +886,9 @@ test('a built project uploads compiled HTML and publishes editable source with s
     expect(job.plan.artifactHash).toBe(await sha256(html));
     expect(new TextDecoder().decode(f.blobs.get(job.plan.artifactHash))).toBe(html);
     const release = await validateRelease(job.current, job.snapshot);
-    expect(release.current.tags.filter((t) => t[0] === 'requires')).toEqual([
-      ['requires', 'storage'],
-      ['requires', 'theme'],
+    expect(release.current.tags.filter((t) => t[0] === 'R')).toEqual([
+      ['R', 'storage'],
+      ['R', 'theme'],
     ]);
     const source = join(f.journal.directory(job.id), 'source');
     expect(await sourceGit(source, ['show', 'HEAD:src/main.ts'])).toContain('export const message');
@@ -1198,6 +1354,11 @@ test('a project with its own NIP-34 remote publishes against it without signing 
     expect(job.current!.tags.find((t) => t[0] === 'source-commit')).toEqual([
       'source-commit',
       commit,
+    ]);
+    expect(job.current!.tags).toContainEqual([
+      'soy-source-repository',
+      `30617:${f.creator.pubkey}:my-repo`,
+      'linked',
     ]);
     expect(job.releaseRefs).toEqual({});
     expect(job.source).toBeUndefined();

@@ -28,19 +28,56 @@ type SearchableNapplet = {
   description: string;
   creator: string;
   topics: readonly string[];
+  archetypes?: readonly string[];
+  intents?: readonly { intent: string }[];
+  domains?: readonly string[];
+  optionalDomains?: readonly string[];
+};
+
+export type DiscoverySearch = {
+  archetype?: string;
+  intent?: string;
+  requiredDomain?: string;
+  optionalDomain?: string;
 };
 
 /** The same subject and text filters apply regardless of discovery source. */
-export function matchesGallery(napplet: SearchableNapplet, search: { tag: string; q: string }) {
+export function matchesGallery(
+  napplet: SearchableNapplet,
+  search: { tag: string; q: string } & DiscoverySearch,
+) {
   const query = search.q.trim().toLowerCase();
   return (
     (!search.tag || napplet.topics.includes(search.tag)) &&
+    (!search.archetype || !!napplet.archetypes?.includes(search.archetype)) &&
+    (!search.intent || !!napplet.intents?.some((item) => item.intent === search.intent)) &&
+    (!search.requiredDomain || !!napplet.domains?.includes(search.requiredDomain)) &&
+    (!search.optionalDomain || !!napplet.optionalDomains?.includes(search.optionalDomain)) &&
     (!query ||
       `${napplet.title} ${napplet.description} ${napplet.creator} ${napplet.topics.map((t) => `#${t}`).join(' ')}`
         .toLowerCase()
         .includes(query))
   );
 }
+
+/** Counts describe this loaded collection, never all relay publications or granted capabilities. */
+export function discoveryFacets(napplets: readonly SearchableNapplet[]) {
+  const facets = (read: (entry: SearchableNapplet) => readonly string[]) => {
+    const counts = new Map<string, number>();
+    for (const entry of napplets)
+      for (const value of new Set(read(entry))) counts.set(value, (counts.get(value) ?? 0) + 1);
+    return [...counts]
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => a.value.localeCompare(b.value));
+  };
+  return {
+    archetypes: facets((entry) => entry.archetypes ?? []),
+    intents: facets((entry) => entry.intents?.map((item) => item.intent) ?? []),
+    requiredDomains: facets((entry) => entry.domains ?? []),
+    optionalDomains: facets((entry) => entry.optionalDomains ?? []),
+  };
+}
+export type DiscoveryFacets = ReturnType<typeof discoveryFacets>;
 
 export function topicFacets(napplets: readonly SearchableNapplet[]) {
   const counts = new Map<string, number>();

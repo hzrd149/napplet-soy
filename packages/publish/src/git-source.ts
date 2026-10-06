@@ -3,6 +3,7 @@ import { PublishError } from './config';
 import { DiagnosticError } from '../../diagnostics/src';
 import { isLegacyPublicBackendContext, LEGACY_BACKEND_CONTEXT } from './legacy-backend-context';
 import { MAX_SOURCE_FILES } from './limits';
+import { createSourceFileReader, createSourceLinkResolver } from './source-links';
 
 export class SourceHistoryError extends DiagnosticError {
   readonly stage = 'check';
@@ -56,6 +57,7 @@ export async function inspectHistory(directory: string, commit: string) {
     checked = new Set<string>();
   const blobs = new Map<string, { bytes: Uint8Array; size: number }>();
   const legacyPublicContexts: { path: string; object: string; commit: string }[] = [];
+  const aliases: { path: string; target: string; executable: boolean }[] = [];
   const { checkSource, checkSourceContent } = await import('./project');
   let total = 0,
     legacyInCurrentTree = false;
@@ -113,7 +115,6 @@ export async function inspectHistory(directory: string, commit: string) {
       const parts = path.split('/');
       while (parts.pop() && parts.length) directories.add(parts.join('/'));
     }
-    const resolvedLinks = new Map<string, string>();
     const linkFailure = (path: string, id: string, cause?: PublishError) =>
       new SourceHistoryError(
         cause?.code ?? 'SOURCE_PATH',
@@ -124,71 +125,35 @@ export async function inspectHistory(directory: string, commit: string) {
           detail: `Blob: ${id}\nContaining commit: ${containingCommit}\nRelease commit: ${commit}`,
           recovery:
             containingCommit === commit
-              ? 'Replace this source link with a regular file or remove it, then save a checkpoint. Current release files must be regular files; safe historical in-repository file aliases may remain in earlier commits. No history rewrite is needed for a safe alias.'
+              ? 'Source aliases must resolve to public regular files within the same committed tree. Fix the reported target/path problem, then save a checkpoint. Safe relative file aliases are supported without replacement or history rewriting.'
               : 'Historical source links must resolve to public regular files within the same committed tree. Absolute, escaping, private, dangling, cyclic and directory links are not supported. Review the recorded commit locally without sharing contents; back up the repository before any explicitly approved history cleanup. soyLI has not rewritten history.',
         },
       );
-    const resolveHistoricalLink = async (start: string) => {
-      const trail = new Set<string>();
-      let path = start;
-      for (;;) {
-        if (resolvedLinks.has(path)) {
-          path = resolvedLinks.get(path)!;
-          break;
-        }
-        if (trail.has(path))
-          throw new PublishError('SOURCE_PATH', 'Cyclic historical source link.');
-        const entry = entries.get(path);
-        if (!entry) throw new PublishError('SOURCE_PATH', 'Dangling or directory source link.');
-        checkSource(path, new Uint8Array());
-        if (entry.mode !== '120000') break;
-        trail.add(path);
-        const blob = await loadBlob(entry.id);
-        const target = new TextDecoder('utf-8', { fatal: true }).decode(blob.bytes);
-        // sourceGit trims text output. Exact byte length prevents that behavior
-        // from silently accepting whitespace or malformed bytes in a link target.
-        if (
-          blob.bytes.length !== blob.size ||
-          !target ||
-          target.length > 200 ||
-          target.startsWith('/') ||
-          /^[a-z]:/i.test(target) ||
-          /[\\\s\u0000-\u001f\u007f\ufffd]/.test(target)
-        )
-          throw new PublishError('SOURCE_PATH', 'Unsupported historical source link target.');
-        checkSourceContent(blob.bytes);
-        const parts = path.split('/').slice(0, -1);
-        const targetParts = target.split('/');
-        for (const [index, part] of targetParts.entries()) {
-          if (!part) throw new PublishError('SOURCE_PATH', 'Empty source link path component.');
-          if (part === '.') continue;
-          if (part === '..') {
-            if (!parts.length)
-              throw new PublishError('SOURCE_PATH', 'Source link escapes its tree.');
-            parts.pop();
-          } else {
-            parts.push(part);
-            const candidate = parts.join('/');
-            checkSource(candidate, new Uint8Array());
-            // Only file aliases are admitted. A link cannot stand in for a
-            // parent directory, including before a later ../ component.
-            if (index < targetParts.length - 1 && !directories.has(candidate))
-              throw new PublishError('SOURCE_PATH', 'Source link traverses a non-directory.');
-          }
-        }
-        path = parts.join('/');
-        if (path.length > 200)
-          throw new PublishError('SOURCE_PATH', 'Historical source link path exceeds its limit.');
-      }
-      for (const link of trail) resolvedLinks.set(link, path);
-    };
+    const resolveLink = createSourceLinkResolver({
+      entries: new Map(
+        [...entries].map(([path, entry]) => [path, entry.mode === '120000' ? 'link' : 'file']),
+      ),
+      directories,
+      checkSource,
+      readLink: async (path) => {
+        const blob = await loadBlob(entries.get(path)!.id);
+        // The text Git helper trims output; do not accept changed link bytes.
+        if (blob.bytes.length !== blob.size)
+          throw new PublishError(
+            'SOURCE_PATH',
+            'Source link target must be an exact relative file path.',
+          );
+        return blob.bytes;
+      },
+    });
     for (const [path, { mode, id }] of entries) {
       if (mode === '120000') {
-        if (containingCommit === commit) throw linkFailure(path, id);
         // Resolution depends on the containing tree, even when the exact same
         // target-string blob and source path already passed in a newer commit.
         try {
-          await resolveHistoricalLink(path);
+          const target = await resolveLink(path);
+          if (containingCommit === commit)
+            aliases.push({ path, target, executable: entries.get(target)!.mode === '100755' });
         } catch (cause) {
           if (!(cause instanceof PublishError)) throw cause;
           if (cause.code === 'HISTORY_LIMIT') throw cause;
@@ -226,7 +191,7 @@ export async function inspectHistory(directory: string, commit: string) {
       }
     }
   }
-  return { commit, legacyPublicContexts };
+  return { commit, legacyPublicContexts, aliases };
 }
 
 export async function checkpoint(directory: string, message: string, author?: string) {
@@ -243,9 +208,13 @@ export async function checkpoint(directory: string, message: string, author?: st
     .split('\0')
     .filter(Boolean);
   const { regularFile, checkSource } = await import('./project');
+  const sourceFile = await createSourceFileReader(directory, new Set(files), {
+    regularFile,
+    checkSource,
+  });
   for (const path of files) {
     try {
-      checkSource(path, await regularFile(directory, path, 40 * 1024 * 1024));
+      checkSource(path, await sourceFile(path, 40 * 1024 * 1024));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }

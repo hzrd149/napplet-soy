@@ -182,7 +182,7 @@ export class IndexWorker {
     // of unrelated kind-5 events; never run an unfiltered deletion firehose.
     for (const relay of this.config.relays)
       for (const kind of kinds) await collect(relay, String(kind), { kinds: [kind] });
-    const rows = this.store.rows();
+    const rows = this.store.allRows();
     const targets = {
       '#e': rows.map((row) => row.id).sort(),
       '#a': rows
@@ -225,7 +225,7 @@ export class IndexWorker {
     await mkdir(directory, { recursive: true });
     const queue = await Promise.all(
       (options.keys
-        ? options.keys.flatMap((key) => this.store.row(key) ?? [])
+        ? options.keys.flatMap((key) => this.store.row(key) ?? this.store.revision(key) ?? [])
         : this.store.due(now)
       )
         .filter((row) => !manifestBlocked(JSON.parse(row.event)))
@@ -357,7 +357,7 @@ export class IndexWorker {
     const read = options.read ?? ((url, filter) => transport.read(url, filter, 2000));
     const filter: Filter =
       target.type === 'snapshot'
-        ? { kinds: [5129], ids: [target.id], limit: 4 }
+        ? { kinds: [35129, 15129, 5129], ids: [target.id], limit: 4 }
         : (() => {
             const identity = decodeAddress(target.naddr);
             return {
@@ -405,14 +405,15 @@ export class IndexWorker {
           }
         }
       }
-      const row = this.store.row(target.key);
+      const row =
+        target.type === 'snapshot' ? this.store.revision(target.id) : this.store.row(target.key);
       if (!row) return completed ? ('missing' as const) : ('failed' as const);
       const event = JSON.parse(row.event) as SignedEvent;
       const deletions: Filter[] = [
         { kinds: [5], authors: [event.pubkey], '#e': [event.id], limit: 64 },
       ];
-      if (target.type === 'address')
-        deletions.push({ kinds: [5], authors: [event.pubkey], '#a': [target.key], limit: 64 });
+      if (event.kind !== 5129)
+        deletions.push({ kinds: [5], authors: [event.pubkey], '#a': [row.key], limit: 64 });
       for (const deletion of await query(deletions))
         try {
           if (deletion.kind === 5) this.store.admit(deletion);

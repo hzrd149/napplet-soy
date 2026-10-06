@@ -1,5 +1,5 @@
 import { identityAddress, type SignedEvent } from './index';
-import { manifestIdentity } from './manifest';
+import { legacySnapshotAddress, manifestIdentity } from './manifest';
 export type SocialScope = {
   key: string;
   address: string | null;
@@ -18,12 +18,7 @@ export function lastTag(e: SignedEvent, key: string) {
 /** Call with a verified napplet manifest. A foreign snapshot cannot claim its author's thread. */
 export function socialScope(e: SignedEvent): SocialScope {
   const identity = manifestIdentity(e);
-  let address = identity ? identityAddress(identity) : null;
-  if (!identity) {
-    const a = oneTag(e, 'a');
-    const match = a && /^(35129|15129):([a-f0-9]{64}):(.*)$/.exec(a);
-    if (match && match[2] === e.pubkey && (match[1] !== '15129' || match[3] === '')) address = a!;
-  }
+  const address = identity ? identityAddress(identity) : legacySnapshotAddress(e);
   return {
     key: address ?? e.id,
     address,
@@ -120,15 +115,24 @@ export function rootComment(e: SignedEvent, scope: SocialScope) {
     (!oneTag(e, 'P') || oneTag(e, 'P') === scope.author)
   );
 }
+function tagsParentAuthor(e: SignedEvent, author: string) {
+  // NIP-22 also uses p tags for profile mentions. The parent reference fixes
+  // which author must be present; other mentions do not change that binding.
+  return e.tags.some((t) => t[0] === 'p' && t[1] === author);
+}
 export function validComment(e: SignedEvent, scope: SocialScope, events: Map<string, SignedEvent>) {
   if (!rootComment(e, scope)) return false;
   const k = oneTag(e, 'k');
   if (k === String(scope.kind)) {
-    if (oneTag(e, scope.address ? 'a' : 'e') !== scope.key || oneTag(e, 'p') !== scope.author)
+    if (oneTag(e, scope.address ? 'a' : 'e') !== scope.key || !tagsParentAuthor(e, scope.author))
       return false;
     if (scope.address && e.tags.some((t) => t[0] === 'e')) {
-      const revision = events.get(oneTag(e, 'e') ?? '');
-      return !!revision && revision.kind === scope.kind && socialScope(revision).key === scope.key;
+      const id = oneTag(e, 'e');
+      if (!id || !/^[a-f0-9]{64}$/.test(id)) return false;
+      const revision = events.get(id);
+      // The signed root/parent address is sufficient when relays have pruned
+      // a replaced revision. A known contradictory target is still rejected.
+      return !revision || (revision.kind === scope.kind && socialScope(revision).key === scope.key);
     }
     return true;
   }
@@ -137,7 +141,7 @@ export function validComment(e: SignedEvent, scope: SocialScope, events: Map<str
   return (
     !!parent &&
     rootComment(parent, scope) &&
-    oneTag(e, 'p') === parent.pubkey &&
+    tagsParentAuthor(e, parent.pubkey) &&
     e.id !== parent.id &&
     parent.created_at <= e.created_at
   );
@@ -148,6 +152,19 @@ export function targetManifest(
   manifests: Map<string, SignedEvent>,
 ) {
   const target = manifests.get(lastTag(e, 'e') ?? '');
+  if (!target) {
+    // NIP-25/57 explicitly bind replaceable targets by address. Old named/root
+    // events need not remain on relays. Never infer snapshot identity from a
+    // missing event or its ancestry: those require the verified target.
+    return (
+      !!scope.address &&
+      /^[a-f0-9]{64}$/.test(lastTag(e, 'e') ?? '') &&
+      oneTag(e, 'a') === scope.address &&
+      e.tags.filter((t) => t[0] === 'k').length <= 1 &&
+      (!oneTag(e, 'k') || oneTag(e, 'k') === String(scope.kind)) &&
+      lastTag(e, 'p') === scope.author
+    );
+  }
   return (
     !!target &&
     (scope.kind === 1111

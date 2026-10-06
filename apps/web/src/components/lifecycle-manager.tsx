@@ -13,7 +13,7 @@ import {
 } from './ui/dialog';
 import { network } from '@/lib/network';
 import { signForAccount } from '@/lib/community-client';
-import { savedLifecycles, saveLifecycle } from '@/lib/lifecycle';
+import { savedLifecycles, saveLifecycle, retainedLifecycleHistory } from '@/lib/lifecycle';
 import { applyLifecycleEvent } from '@/lib/protocol-catalog';
 import { diagnose } from '../../../../packages/diagnostics/src';
 import {
@@ -76,6 +76,11 @@ export function LifecycleManager({
         relays: [...new Set([...relays, ...network().relays])].slice(0, 8),
         metadata,
         saved: previous?.plan.manifests,
+        history: await retainedLifecycleHistory(manifest),
+        snapshotPairs: previous?.plan.snapshotPairs?.map((pair) => ({
+          current: previous.plan.manifests.find((event) => event.id === pair.current)!,
+          snapshot: previous.plan.manifests.find((event) => event.id === pair.snapshot)!,
+        })),
         local,
         io,
       });
@@ -207,6 +212,30 @@ export function LifecycleManager({
                 recalled.
               </p>
             </div>
+            {receipt.operation !== 'republish' && (
+              <details className="lifecycle-release-inventory">
+                <summary>Selected signed releases ({receipt.plan.manifests.length})</summary>
+                <p>
+                  Only these event IDs and this publication's address are selected. Exact paired
+                  snapshots remain independent for playback; this confirmation includes them in this
+                  removal request.
+                </p>
+                <ul>
+                  {receipt.plan.manifests.map((event) => (
+                    <li key={event.id}>
+                      {event.tags.find((tag) => tag[0] === 'title')?.[1] ?? 'Untitled napplet'}
+                      {' · '}
+                      {event.kind === 5129
+                        ? receipt.plan.snapshotPairs?.some((pair) => pair.snapshot === event.id)
+                          ? 'Exact paired snapshot'
+                          : 'Snapshot'
+                        : 'Named/root revision'}
+                      <code>{event.id}</code>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
             <ol className="lifecycle-steps" aria-label="Service progress" aria-live="polite">
               {receipt.steps.map((s) => (
                 <li key={s.id} data-state={s.state}>

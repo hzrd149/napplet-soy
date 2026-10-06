@@ -42,22 +42,27 @@ contact the selected providers directly, which can observe those requests.
 
 ## HTTP that remains
 
-There are seven `/api/*` routes. Each represents state or output owned by this
-website, rather than a required wrapper around a Nostr entity:
+Site-owned HTTP routes remain for administration, previews and publication
+receipts. The manifest migration also adds an optional, bounded signed-event
+accelerator for pinned revisions that relays may have replaced:
 
-| Route               | Purpose                                                                                                                          |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `/api/admin-access` | Determine access to this site's administration UI.                                                                               |
-| `/api/admin`        | Signed site moderation, admin membership and featured selections.                                                                |
-| `/api/names`        | Claim and query this site's readable aliases; portable naddrs do not depend on them.                                             |
-| `/api/health`       | Deployment and local service health.                                                                                             |
-| `/api/og/:id`       | Generate this site's share image, including fallback artwork.                                                                    |
-| `/api/profile-og`   | Generate this site's profile share image.                                                                                        |
-| `/api/publications` | Optional confirmation that this site's index has observed a publication. Publishing to Nostr is already acknowledged separately. |
+| Route                    | Purpose                                                                                                                                                                                                                              |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/api/admin-access`      | Determine access to this site's administration UI.                                                                                                                                                                                   |
+| `/api/admin`             | Signed site moderation, admin membership and featured selections.                                                                                                                                                                    |
+| `/api/names`             | Claim and query this site's readable aliases; portable naddrs do not depend on them.                                                                                                                                                 |
+| `/api/health`            | Deployment and local service health.                                                                                                                                                                                                 |
+| `/api/og/:id`            | Generate this site's share image, including fallback artwork.                                                                                                                                                                        |
+| `/api/profile-og`        | Generate this site's profile share image.                                                                                                                                                                                            |
+| `/api/publications`      | Optional confirmation that this site's index has observed a publication. Publishing to Nostr is already acknowledged separately.                                                                                                     |
+| `/api/manifest`          | Read-only signed manifest lookup from retained index/fixture state. The browser uses it only as a fallback for an exact pinned event ID, then checks the signature, manifest contract and requested ID.                              |
+| `/api/lifecycle-history` | Optional bounded inventory of signed named/root revisions and exact paired snapshots retained by this index. The author reviews their independently verified IDs before signing deletion requests; the response grants no authority. |
 
-The sixteen former manifest, artifact, resource, relay-read, audio, social,
-gallery-social, genealogy, profile, profile-image, profiles, source, comment-media,
-preview image, preview video and zap routes are removed.
+The older general protocol-proxy routes for artifact, resource, relay-read,
+audio, social, gallery-social, genealogy, profile, profile-image, profiles,
+source, comment-media, preview video and zap operations remain removed. The
+manifest endpoint is an explicit archival fallback, not an executable-byte proxy
+or a reason to trust an unsigned response. It does not initiate relay work.
 
 TanStack loaders retain server implementations for HTML rendering and link-preview
 crawlers. Their browser implementations query protocols directly instead of
@@ -69,7 +74,9 @@ selection over Nostr in the browser.
 
 SSR and generated OG images may use the server index and normalized image cache.
 They are conveniences for fast first responses and crawlers; the browser can
-resolve an unindexed portable link through its own configured relays. Server
+resolve an unindexed portable link through its own configured relays. The
+browser independently applies its policy and signed deletion checks to a pinned
+event recovered from the index. Server
 network fetches continue using the existing DNS-safe admission rules. Site
 moderation is projected to the browser independently of data transport.
 
@@ -105,3 +112,45 @@ reused briefly, and closed after ten seconds idle (at most 24 destinations).
 The verified-event store retains at most 8,000 events/16 MiB; conversation and
 source caches are also bounded. First-load hydration initializes operator policy
 before any child query, then refreshes server-rendered data over the protocols.
+
+## Relay read audit — 2026-10-05 source
+
+The browser uses one verified Applesauce `EventStore`, reused `RelayPool`
+connections and scoped RxJS subscriptions. UI reads may render cached and arriving
+events while relay refresh continues. An exact event ID has one signed value;
+replaceable addresses and mutation prerequisites have different completion rules.
+This update is implemented locally and is not a deployment statement.
+
+| Path                                     | Read behavior and limits                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Proposals and repository announcements   | Cached/store timelines render as verified events arrive. New repository winners replace the projection; related revisions, status and comments load in groups of 32 without waiting for the root query deadline. Unmount/refresh cancels subscriptions; at most 100 roots and 2,000 related events. Status and revision authority still use the NIP-34 reducers. |
+| Pinned proposal/source manifests         | Exact-ID lookup uses verified cached bytes or the first matching verified event. An empty relay EOSE cannot hide a later match. Source admission still checks manifest validity, moderation, expiration and owner-authored deletions.                                                                                                                            |
+| README, source files and downloads       | Identical deletion reads share an in-flight query and a 15-second result, bounded to 512 keys. Every admission merges newly observed signed deletion requests and checks local policy again. Source archive/hash/tar checks remain mandatory; cached files never bypass admission.                                                                               |
+| Creator names and avatars                | A batch of up to 32 authors subscribes to the verified profile timeline before starting its relay read. Names/images appear progressively; newer winners supersede earlier ones. Invalid or moderated current profiles never revive an older name.                                                                                                               |
+| Featured selections                      | Up to 12 operator selections resolve with four concurrent workers, preserving their display order.                                                                                                                                                                                                                                                               |
+| Catalog enrichment                       | Author-deletion and descriptor groups run four batches at a time. Legacy empty-content app descriptors and their kind-0 fallback profiles share a query phase. Current manifest/metadata winner selection still collects relay candidates through the bounded deadline.                                                                                          |
+| Genealogy                                | Pinned ancestors reuse exact-ID lookup and source visibility checks. Address-only parents retain current-winner resolution. The 12-generation/cycle/identity limits remain unchanged.                                                                                                                                                                            |
+| Social and payment reads                 | Conversation/gallery reducers stream scoped events. Likes use viewer-specific reads; LNURL setup uses available verified profiles. Receipt/payment confirmation still requires its existing proof checks; a timeout or relay ACK is not payment confirmation.                                                                                                    |
+| Runtime NAP reads and server indexing    | Playback already streams verified events through scoped Applesauce subscriptions with cancellation/quotas. Finite server indexing deliberately collects candidates before choosing replaceable winners.                                                                                                                                                          |
+| CLI review, merge, lifecycle and editing | Existing bounded final reads and any explicit complete-view checks remain separate from browser display projections. No first-response UI snapshot grants merge, deletion, signing or publication authority.                                                                                                                                                     |
+
+Applesauce consumes kind-5 events into its deletion manager rather than retaining
+them in ordinary timelines. `ProtocolClient.cached()` therefore merges a bounded
+cache of verified signed deletion requests with store results, under the same
+8,000-event/16-MiB retention budget. This preserves timestamp/author evidence for
+our reducers. Use it for cached deletion reads instead of assuming kind 5 remains
+in `store.getByFilters()`.
+
+The detail page keys its conversation by signed identity, not the relay hints in
+an encoded address. Hydration can update those hints without remounting proposals,
+restarting social reads or clearing a comment draft. A different signed release
+still retires pending social work. Empty proposal refreshes complete their loading
+state after the bounded reads finish.
+
+Regression fixtures combine a responsive relay with a silent fallback. They cover
+progressive proposal/status/profile rendering, source navigation, exact-ID lookup
+past an empty EOSE, observable sharing/cancellation, owner-versus-foreign deletion
+requests, descriptor/profile batching and drafts surviving relay-hint hydration.
+The first uncached source visibility
+read can still take the relay deadline (3.5 seconds); this update removes repeated
+waits, not Nostr's incomplete-view or third-party availability limits.

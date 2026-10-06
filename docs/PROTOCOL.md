@@ -1,5 +1,7 @@
 # Napplet interoperability and publishing contract
 
+2026-10-05 manifest rollout: soyLI 0.24.0 publications follow [dskvr/nips PR 7](https://github.com/dskvr/nips/pull/7) at `4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51`. The deployed reader retains the previous format. See [migration semantics and rollout](NIP5D-MIGRATION.md) and [release evidence](CLI-RELEASES.md).
+
 2026-09-23 public application-data source update: the shared host grants a
 constrained `relay.publish`/`outbox.publish` subset for kind-30078 records under
 the documented `soy.app-data/1` convention. NIP-78 is pinned to
@@ -17,7 +19,7 @@ Implemented source is distinct from a deployed runtime or released CLI.
 metadata and NIP-19 public keys, and [genealogy](REMIXING.md#genealogy-on-napplet-pages)
 reads signed parent/origin claims. NIP-01/24 and NIP-5A were reviewed at
 `a2494f4f81d46684e5814a9bf35e2b1df978f955`; the NIP-5D pin and napplet kinds below
-remain unchanged. A snapshot’s `a` identifies itself, not its remix parent.
+were unchanged at that review. That legacy snapshot self-address rule is retained only for old manifests; the new format uses snapshot `a` solely for ancestry.
 Optional `remix-version` pins exact ancestry; absence never affects playback.
 Website kind-0 signing is explicit profile editing, not a new iframe permission.
 Both features are verified locally and await deployment.
@@ -67,27 +69,27 @@ the measured build profile and [COMPATIBILITY.md](COMPATIBILITY.md) for evidence
 
 ## 1. Compatibility baseline
 
-The current [NIP-5D proposal at commit 24711d9](https://github.com/dskvr/nips/blob/24711d9c47bbdd07908bf1d52bf677d9cbc530f0/5D.md) defines named napplets as kind `35129`, root napplets as `15129`, and immutable snapshots as `5129`. It adopts the file-manifest tag schema and aggregate-hash algorithm from [NIP-5A](https://github.com/nostr-protocol/nips/blob/master/5A.md). Generic nsites use different kinds; they must not be silently treated as sandboxed napplets.
+The selected [NIP-5D PR 7 at 4d0fb2e](https://github.com/dskvr/nips/blob/4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51/5D.md) defines named napplets as kind `35129`, root napplets as `15129`, and independent snapshots as `5129`. New manifests carry the raw SHA-256 of the single HTML artifact in `x`, a plain-text description in `content`, and required/optional capability declarations in `R`/`O`. The executable manifest no longer derives from NIP-5A. Generic nsites use different kinds and are not napplets.
 
-The client accepts named, root, and snapshot manifests. Our publisher will default to named napplets and additionally publish snapshots for pinned links; snapshots are not a prerequisite for playing another publisher's current manifest. The source repository has its own NIP-34 identity.
+The client also accepts the legacy path/aggregate format pinned at `24711d9c47bbdd07908bf1d52bf677d9cbc530f0`. Existing signed events are never rewritten. New soyLI publications default to named manifests and a separately valid snapshot; frozen pending legacy jobs resume their original signed format. Snapshots and Soy metadata are not prerequisites for playing any publisher's manifest. Source repositories retain their own NIP-34 identity.
 
 The tested release must record exact SDK, shim, template, conformance, ngit, GRASP, Blossom, and protocol revisions. Reading an old README or choosing the latest versions independently is insufficient. The [compatibility record](COMPATIBILITY.md) rechecks the NIP-5D pin and inventories current operations/evidence. The host injects domains before creator scripts and performs the SHELL handshake itself; standard artifacts do not need app-owned bootstrap code. The new [NAP-CONFIG implementation](CONFIGURATION.md) uses upstream build metadata inside the signed HTML and shares one host between the CLI preview and website. Other per-NAP proposal audits and independent-client acceptance remain open.
 
 ## 2. Domain identities
 
-| Entity            | Identifier                                            | Meaning                                                 |
-| ----------------- | ----------------------------------------------------- | ------------------------------------------------------- |
-| Creator           | Nostr public key                                      | Author who signs the napplet's releases                 |
-| Napplet           | `35129:<author-hex>:<d-tag>` or `15129:<author-hex>:` | Stable identity across title changes and releases       |
-| Release           | Signed kind-5129 snapshot event ID                    | Immutable reference to one publication                  |
-| Artifact          | NIP-5A aggregate hash                                 | Identity of the playable files, independent of metadata |
-| Source repository | `30617:<maintainer-hex>:<repo-id>`                    | NIP-34 repository address                               |
-| Source revision   | Repository address plus exact Git object ID           | Source selected for a release                           |
-| Remix             | New napplet address plus parent release reference     | Independent creation with explicit ancestry             |
+| Entity            | Identifier                                            | Meaning                                             |
+| ----------------- | ----------------------------------------------------- | --------------------------------------------------- |
+| Creator           | Nostr public key                                      | Author who signs the napplet's releases             |
+| Napplet           | `35129:<author-hex>:<d-tag>` or `15129:<author-hex>:` | Stable identity across title changes and releases   |
+| Release           | Exact signed manifest event ID                        | Immutable reference to one publication              |
+| Artifact          | Raw HTML SHA-256 (`x` in new manifests)               | Identity of playable bytes, independent of metadata |
+| Source repository | `30617:<maintainer-hex>:<repo-id>`                    | NIP-34 repository address                           |
+| Source revision   | Repository address plus exact Git object ID           | Source selected for a release                       |
+| Remix             | New napplet address plus parent release reference     | Independent creation with explicit ancestry         |
 
 Use a short generated `d-tag`, for example `plasma-k4m2`, with a separate editable display title. Limit generated IDs to 1–13 lowercase letters/digits/hyphens, with no trailing hyphen, as a conservative profile choice; do not claim the current napplet implementation itself enforces that length. Never derive identity solely from a mutable title or globally reserve titles.
 
-The runtime's protocol tuple `(dTag, aggregateHash)` does not replace the full public identity. Host-owned storage, permission records, and social grouping must also include the author-qualified napplet address. Two authors can intentionally publish identical code and identifiers.
+The new protocol tuple `(dTag, artifactHash)` does not replace the full public identity. Host-owned storage, permission records, and social grouping also include the author-qualified address, or an independent snapshot's own event ID. Two authors can publish identical code and identifiers. Existing named/root saves retain their deterministic legacy-derived physical storage key when the same bytes are republished in the new format. This compatibility key does not change the new raw artifact identity or trust a parent address.
 
 ## 3. Playable package
 
@@ -98,9 +100,9 @@ The runtime's protocol tuple `(dTag, aggregateHash)` does not replace the full p
 - The local preview and public player use the same runtime library and production bundle policy. A normal unsandboxed Vite page does not prove the napplet will run on the website.
 - Current host capabilities and operation limits are recorded in [PUBLIC-RUNTIME.md](PUBLIC-RUNTIME.md). Required domains are checked from the signed manifest for every napplet, including fixtures. Direct browser networking remains blocked; supported resource and relay operations go through the host.
 
-The hash algorithm is the upstream NIP-5A algorithm. Implement it once, with vectors shared by CLI, API, and browser. Reject malformed hashes, duplicate/conflicting paths, invalid signatures, inconsistent aggregate hashes, and unsupported required capabilities.
+New manifests require exactly one two-element `x` tag with the raw HTML SHA-256. Legacy manifests retain the pinned path/aggregate checks. The shared parser selects the format explicitly and never retries a failed new manifest as legacy. Reject invalid signatures, malformed or conflicting identity fields, inconsistent hashes and unsupported required capabilities. Missing optional capabilities do not block execution. The complete required set is checked locally; a relay filter match is not a compatibility verdict.
 
-Covers, metadata, and source archives live on Blossom too, but are not playable `path` entries. This preserves a single self-contained runtime artifact.
+Icons, covers, metadata, and source archives live on Blossom too, but are separate from the playable artifact. This preserves a single self-contained runtime artifact.
 
 ## 4. Optional presentation and source metadata
 
@@ -108,11 +110,11 @@ Topics use optional lowercase `t` hashtags from [NIP-24](https://github.com/nost
 
 The display/search projection trims a leading `#` and surrounding whitespace, normalizes NFC and lowercase, deduplicates in author order, and accepts up to 32 topics of at most 64 Unicode code points. Empty values, embedded whitespace, control/bidi characters, and embedded `#` are omitted from the projection without changing the signed event or its admission. Unknown well-formed topics are preserved; no topics are inferred from titles, capabilities, source, or linked preview descriptors. The CLI seeds editable `topics` in local project configuration; the publisher serializes them as standard `t` tags.
 
-Use upstream manifest fields for identity, playable paths, aggregate hash, required domains, Blossom `server` hints, title, description, and `source`. A `source` reference can identify a NIP-34 repository through `nostr://` or a public HTTPS repository/archive. Our publisher defaults to retrievable open source. Source availability affects inspection/remixing, not whether this client can discover and play an otherwise supported napplet.
+Use the selected manifest fields for identity, raw artifact `x`, `R`/`O` domains, Blossom `server` hints, title, plain-text `content`, and `source`. Optional `z` archetypes and queryless `i` intent identities plus parameter names support discovery, not runtime grants or automatic intent execution. The gallery supports these metadata filters; standard tag queries remain available when a relay lacks optional NIP-91 intersection support. A `source` reference can identify a NIP-34 repository through `nostr://` or a public HTTPS repository/archive. Our publisher defaults to retrievable open source. Source availability affects inspection/remixing, not whether this client can discover and play an otherwise supported napplet.
 
-Prefer existing descriptor conventions over inventing a parallel manifest. [NIP-5A's upstream app descriptors](https://github.com/nostr-protocol/nips/blob/master/5A.md#upstream-app-descriptors) allow an optional `app` reference to an addressable descriptor event. Linked previews support NIP-89 application pictures and Zapstore kind-32267 screenshots/icons, with signed fixtures and a live descriptor lookup checked. Kind-32267 descriptors may also carry NIP-92 video attachments; the initial bounded silent-WebM profile is documented in PREVIEWS.md. Other descriptor formats require a separate adapter and interoperability evidence. There is no Space-specific screenshot field required for playback.
+A standard optional `icon` carries a PNG/JPEG/WebP hash and MIME type. Fetch it only from declared Blossom origins, verify hash and decoded format, and render verified bytes; failures fall back without affecting playback. See [icon limits](PREVIEWS.md). The selected PR defines no screenshot tag: existing linked descriptors continue to supply screenshots and preview clips as optional presentation extensions. Prefer these existing descriptor conventions over inventing new wire tags. [NIP-5A's upstream app descriptors](https://github.com/nostr-protocol/nips/blob/master/5A.md#upstream-app-descriptors) allow an optional `app` reference to an addressable descriptor event. Linked previews support NIP-89 application pictures and Zapstore kind-32267 screenshots/icons, with signed fixtures and a live descriptor lookup checked. Kind-32267 descriptors may also carry NIP-92 video attachments; the initial bounded silent-WebM profile is documented in PREVIEWS.md. Other descriptor formats require a separate adapter and interoperability evidence. There is no Space-specific screenshot field required for playback.
 
-Category, cover, aspect ratio, license details, exact source commit, build provenance, and remix references may enrich the gallery. Keep site aliases and curation separate from signed protocol identity. Verify any signed descriptor and its association before trusting its claims. Missing, unknown, invalid, or unavailable optional descriptors fall back to the ordinary manifest and a generated poster; they do not hide a valid napplet or block playback. An optional descriptor may never override signed paths or required capabilities.
+Category, cover, aspect ratio, license details, exact source commit, build provenance, and remix references may enrich the gallery. Keep site aliases and curation separate from signed protocol identity. Verify any signed descriptor and its association before trusting its claims. Missing, unknown, invalid, or unavailable optional descriptors fall back to the ordinary manifest and a generated poster; they do not hide a valid napplet or block playback. An optional descriptor may never override the signed artifact hash or required capabilities.
 
 Preview implementation today: the fixtures have bundled SVG illustrations; relay imports resolve supported linked descriptors into bounded cached raster images. Gallery/player covers and OG images use those images, with generated cards for missing or unusable metadata. The latest 93-entry relay cache has no app links, so those cards still use the fallback. A generic card does not prove the author supplied no screenshot through another format. Metadata crawling never executes napplet code. The same descriptor parser and image indexer are available to the future publisher; see [PREVIEWS.md](PREVIEWS.md).
 
@@ -120,19 +122,19 @@ Removing all optional Space metadata must leave the same napplet address, playab
 
 ## 5. Current version, snapshots, and ancestry
 
-The named manifest is the current pointer and carries standard playable tags, required capabilities, source URL, and any optional descriptor reference. Our publisher also produces a snapshot with the same artifact and an `a` reference to the napplet's own address. A snapshot has no `d` tag. Each event is independently valid and playable without retrieving the other.
+The named/root manifest is the current pointer. A new-format `5129` snapshot is independently verified against its own raw `x` and has no `d`. Its optional `a` and `A` identify its immediate parent and root ancestor, possibly another creator. They confer no storage, backend, social or deletion authority. New named/root events have no `a`/`A`; legacy events retain their historical meanings. Optional `remix-version` preserves an exact ancestry claim.
 
-Do not add a mandatory custom current-to-snapshot pointer. The publisher can retain the exact pair in its local journal and the site index. Validate each manifest independently and check source address, signer, and artifact when associating a pair; matching code alone does not identify the exact release metadata. Public playback does not require a snapshot pair. Fixtures use these same rules and no longer emit a custom snapshot pointer or discovery hashtag.
-
-Follow the pinned upstream schema for the named manifest's `a` immediate-parent and `A` original-ancestor tags on remixes. Snapshot `a` means the snapshotted napplet, not its remix parent. Put the exact parent snapshot in the descriptor so those meanings do not collide.
+Public playback requires no snapshot pair. Local journals can retain a pair; pairing verifies both signatures, author, artifact and signed metadata. Deletion of a paired new snapshot requires this explicit validated record; an ancestry tag is insufficient. Gallery coalescing is presentation only and cannot grant authority.
 
 Keep URLs explicit:
 
 ```text
-/n/<naddr>            latest valid publication
-/r/<snapshot-event>  pinned publication
+/n/<naddr>            latest publication
+/r/<event-id>         exact signed manifest revision (all three kinds)
 /@<handle>/<slug>     site alias for the stable napplet address
 ```
+
+New soyLI pinned links use the exact named event ID, preserving that app's verified address for saved data and backend bindings. The persistent index retains observed old revisions after replacement and continues checking deletion, moderation and bytes. A fresh operator cannot recover a pruned event from a relay that no longer retains it: retain/back up the index and original signed events. Legacy pinned snapshot links still work. An independent new snapshot gets its own scope, even if it names the same author as an ancestor.
 
 Titles and vanity slugs are display aliases. A fork gets a new creator-qualified address and repository, and starts from the exact referenced source commit rather than whatever is at `main` today. Do not grant a remixing creator write access to the original repository. A remix is an independent project, not an automatic PR.
 
@@ -148,16 +150,17 @@ Every release made by our publisher should include retrievable source, an exact 
 
 2026-10-03 source admission update: publication, remix and source browsing share a
 1,024-file tooling safety budget, not a Nostr quota. Source remains bounded to
-40 MiB and its tar to 50 MiB; the current release tree/archive contains only regular
-files. Older Git trees may
-retain safe aliases to public regular files within the same tree after removal or
-replacement at HEAD. This changes no manifest, signature, runtime capability or
-upstream pin. Existing 128-file website deployments need the updated source parser
+40 MiB and its tar to 50 MiB. As of the 2026-10-05 source-alias correction, current
+and historical Git trees may retain safe relative aliases to public regular files
+within the same tree. The archive represents each alias as a regular copy of its
+exact committed target bytes; copies count toward the expanded-source limit.
+Git links and history are preserved, while archive readers still refuse links.
+This changes no manifest, signature, runtime capability or upstream pin. Existing 128-file website deployments need the updated source parser
 to inspect larger archives; optional source inspection never gates playback.
 The hash-verifiable archive remains portable for recovery, offline inspection and
 independent mirroring alongside the source repository.
 
-In its hosted repository the publisher retains Git release refs so published commits remain reachable after branches move. A creator can instead publish against their own NIP-34 repository, which soyLI references but never writes ([details](PUBLISHING.md#publishing-from-your-own-nip-34-repository)). There the creator keeps released commits reachable; the release commit must be in a ref of the repository's signed state and served by one of its clone URLs before publication. The `source` value keeps its ordinary `nostr://` shape, so this changes no manifest tag, admission rule or NIP-5D pin. It includes optional `source-commit` and `source-archive` provenance tags alongside the standard `source` repository URL. These two convenience tags are Space conventions, not protocol requirements; clients can ignore them and discover/play the same manifest. Large original media can be represented in a content-addressed source asset lockfile and restored during remix; every required source asset must be retained and hash-checked too. V1 can keep normal small assets in Git and introduce that lockfile only when needed.
+In its hosted repository the publisher retains Git release refs so published commits remain reachable after branches move. A creator can instead publish against their own NIP-34 repository, which soyLI references but never writes ([details](PUBLISHING.md#publishing-from-your-own-nip-34-repository)). There the creator keeps released commits reachable; the release commit must be in a ref of the repository's signed state and served by one of its clone URLs before publication. The `source` value keeps its ordinary `nostr://` shape, so this changes no standard manifest field, admission rule or NIP-5D pin. It includes optional `source-commit` and `source-archive` provenance tags alongside the standard `source` repository URL. Linked repositories also carry optional `soy-source-repository` metadata (`address`, `linked`), an author-signed cleanup policy that retains that repository when deleting a napplet even if their identifiers match. A local publication journal provides the same retention protection for older signed releases. It is not a discovery or playback requirement. These convenience tags are Space conventions, not protocol requirements; clients can ignore them and discover/play the same manifest. Large original media can be represented in a content-addressed source asset lockfile and restored during remix; every required source asset must be retained and hash-checked too. V1 can keep normal small assets in Git and introduce that lockfile only when needed.
 
 A creator signature and matching source archive prove what the creator published and claimed. They do not prove the HTML was built from that source. Initially label the association as creator-declared. Only show a stronger reproducible-build claim after an independent isolated rebuild reproduces the artifact hash. That verification is a later worker capability, not a prerequisite for every quick first publish.
 
@@ -190,7 +193,7 @@ through relays, without publishing synthetic receipts or introducing a site API.
 
 ## 8. Browser trust boundary
 
-1. Obtain and verify the signed manifest. Fetch and verify all referenced playable bytes and recompute the aggregate hash. Resolve optional descriptors separately for presentation; their absence cannot prevent execution.
+1. Obtain and verify the signed manifest. Fetch and verify the HTML against raw `x` for new manifests, or the legacy path/aggregate binding for old manifests. Resolve optional descriptors separately for presentation; their absence cannot prevent execution.
 2. Construct a fresh `srcdoc` document, placing the host's CSP first and its selected runtime prelude before creator scripts. Hash verification happens before those host additions; additions are excluded from the signed artifact hash.
 3. Use `sandbox="allow-scripts"` without `allow-same-origin`. Do not grant forms, popups, downloads, top navigation, or devices by default.
 4. Scope each inbound message to the registered iframe `Window`, full app address, release, and current session. Reject malformed/oversized payloads and unknown senders; silently ignore unknown message types as the pinned protocol requires. Bound pending operations and message rates.
@@ -210,7 +213,7 @@ Store saves in host-owned storage scoped by viewer/anonymous local profile and f
 
 ## 9. Protocol-level acceptance checks
 
-- Publish from our CLI with a real creator identity, then discover the signed manifest using only standard Nostr kind/address filters in a second implementation. That client must retrieve the hinted Blossom bytes, verify the same aggregate hash, and run the creation without the Space API, alias, hashtag, or optional descriptor. Publishing is implemented; this independent-client acceptance check remains on A12, including a configurable artifact.
+- Publish from our CLI with a real creator identity, then discover the signed manifest using only standard Nostr kind/address filters in a second implementation. That client must retrieve the hinted Blossom bytes, verify the signed artifact hash, and run the creation without the Space API, alias, hashtag, or optional descriptor. Publishing is implemented; this independent-client acceptance check remains on A12, including a configurable artifact.
 - Import that publication back through the same relay ingestion path as any other publisher. Local fixtures and imported copies must receive identical validation, capabilities, resource access, and storage identity.
 - Removing optional presentation metadata still yields a discoverable, playable napplet with a generated poster.
 - Another operator can reconstruct the napplet, source, metadata, and ancestry from exported signed events, Git, and Blossom without our Postgres database.

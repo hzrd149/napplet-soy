@@ -1,6 +1,8 @@
 [
-  "wss://nos.lol",
   "wss://relay.primal.net",
-  "wss://nostr.mom",
-  "wss://relay.pocketstr.com"
+  "wss://relay.nos.social",
+  "wss://relay.nostr.net",
+  "wss://nostr.oxtr.dev",
+  "wss://nostr-01.yakihonne.com",
+  "wss://relay.nostr.wirednet.jp"
 ]

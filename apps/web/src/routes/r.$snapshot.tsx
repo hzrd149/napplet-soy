@@ -50,5 +50,5 @@ function Release() {
       n.availability !== 'ready')
   )
     return <DiscoveryState state={discovery ?? 'failed'} message={message} />;
-  return 'provenance' in n ? <PublicDetail napplet={n} /> : <Detail napplet={n} pinned />;
+  return 'provenance' in n ? <PublicDetail napplet={n} pinned /> : <Detail napplet={n} pinned />;
 }

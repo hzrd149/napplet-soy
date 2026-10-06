@@ -10,6 +10,14 @@ procedure are documented in [Historical source checks](CLI.md#historical-source-
 CLI terminal and JSON regressions verify the context, recovery, redaction and
 unchanged repository/publication status.
 
+Safe relative source aliases, including `CLAUDE.md -> AGENTS.md`, are accepted in
+current and historical trees. Rejected aliases retain the affected source path and
+a safe reason (for example a cycle or missing selected target), without printing
+raw link targets or credentials. Git history errors retain the blob and containing
+commit. Safe aliases do not require replacement or history rewriting. A
+`GIT_MERGE_SOURCE` diagnostic means the predicted merge failed source checks before
+any branch was changed; it preserves the underlying source cause and recovery.
+
 `GIT_INITIAL_COMMIT_FAILED` reports a failed initial scaffold checkpoint, preserving
 the Git cause, exit status and bounded redacted output. Generated files stay in the
 new folder; the recovery step explains how to inspect and checkpoint them without
@@ -177,3 +185,10 @@ Regression tests exercise the actual CLI entrypoint, including a failing tool
 fixture, and can run against a compiled binary with `SPACE_TEST_CLI=/absolute/path/to/soyli`.
 Shared tests cover cause cycles, configuration values, split-chunk secrets and
 bounded output; credential tests check that only OS codes cross the vault boundary.
+
+Manifest migration reports `MIGRATION_NOT_FOUND`, `MIGRATION_STALE`,
+`MIGRATION_SNAPSHOT`, `MIGRATION_DELETED`, `MIGRATION_EXPIRED` or `REMOTE_CONFLICT`
+with a next step. Exhausted artifact downloads retain bounded server/HTTP/hash
+failure causes through the diagnostic boundary. `MIGRATION_PUBLISH` retains the
+primary relay refusal and instructs the author to resume the exact saved event.
+No migration failure silently rebuilds or overwrites an existing publication.

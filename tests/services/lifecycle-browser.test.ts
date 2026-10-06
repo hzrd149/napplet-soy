@@ -145,6 +145,7 @@ test('authors can unpublish in the shell, recover after reload, and confirm reac
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto(`${site}/manage`);
     await page.getByRole('button', { name: 'Sign in to manage your napplets' }).click();
+    await page.getByRole('button', { name: 'Extension', exact: true }).click();
     await page.getByRole('button', { name: 'Connect browser extension' }).click();
     await page.getByRole('button', { name: 'Manage publication' }).click();
     await page.getByRole('button', { name: 'Unpublish', exact: true }).click();

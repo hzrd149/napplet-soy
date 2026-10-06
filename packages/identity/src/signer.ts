@@ -1,6 +1,8 @@
 import { PrivateKeySigner } from 'applesauce-signers/signers/private-key-signer';
 import { NostrConnectSigner } from 'applesauce-signers/signers/nostr-connect-signer';
 import { RelayPool } from 'applesauce-relay';
+import { createDefer } from 'applesauce-core/promise';
+import { from, lastValueFrom } from 'rxjs';
 import type { EventTemplate, NostrEvent } from 'nostr-tools';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { verifiedEvent, type SignedEvent } from '../../protocol/src';
@@ -30,11 +32,11 @@ export type SignerOptions = {
   signal?: AbortSignal;
   onAuth?: (url: string) => Promise<void>;
   kinds?: number[];
+  name?: string | ((clientPubkey: string) => string);
+  url?: string;
 };
 export type PairingOptions = SignerOptions & {
   onPairing: (uri: string) => void | Promise<void>;
-  name?: string;
-  url?: string;
 };
 export function signerRelays(values: string[], network: Network) {
   const relays = [...new Set(values)];
@@ -151,6 +153,42 @@ class Session extends NostrConnectSigner {
   constructor(options: ConstructorParameters<typeof NostrConnectSigner>[0]) {
     super(options);
     this.log.enabled = false;
+  }
+  /** SDK 6.2.2 lacks the fourth NIP-46 connect parameter. Keep its encryption,
+   * response dispatch, authorization challenges and close/cancellation registry. */
+  async connectNamed(
+    secret: string | undefined,
+    permissions: string[],
+    metadata?: { name: string; url: string },
+  ) {
+    if (!metadata) return this.connect(secret, permissions);
+    if (!this.remote) throw new AccountError('INVALID_SIGNER', 'Missing remote signer public key.');
+    await this.open();
+    const id = crypto.randomUUID(),
+      response = createDefer<string>();
+    response.catch(() => {});
+    this.requests.set(id, response);
+    try {
+      const content = await this.signer.nip44!.encrypt(
+        this.remote,
+        JSON.stringify({
+          id,
+          method: 'connect',
+          params: [this.remote, secret ?? '', permissions.join(','), JSON.stringify(metadata)],
+        }),
+      );
+      const event = await this.createRequestEvent(content);
+      const publishing = this.publishMethod(this.relays, event);
+      await lastValueFrom(from(publishing), { defaultValue: undefined });
+      const ack = await response;
+      this.isConnected = true;
+      return ack;
+    } catch (error) {
+      this.isConnected = false;
+      throw error;
+    } finally {
+      this.requests.delete(id);
+    }
   }
   override async handleEvent(event: NostrEvent) {
     if (
@@ -311,6 +349,9 @@ async function openSession(
           await options.onAuth(parsed.href);
         },
       });
+      const name =
+        typeof options.name === 'function' ? options.name(remote.clientPubkey) : options.name;
+      const metadata = name ? { name, url: options.url ?? 'https://napplet.soy' } : undefined;
       if (credential.type === 'pairing') {
         const pairing = options as PairingOptions;
         await bounded(async () => {
@@ -319,7 +360,7 @@ async function openSession(
           waiting.catch(() => {});
           await pairing.onPairing(
             remote!.getNostrConnectURI({
-              name: pairing.name ?? 'Napplet Space',
+              name: name ?? 'Napplet Space',
               url: pairing.url ?? 'https://napplet.soy',
               permissions: ['get_public_key', ...NostrConnectSigner.buildSigningPermissions(kinds)],
             }),
@@ -328,10 +369,11 @@ async function openSession(
         });
       } else {
         const ack = await bounded(() =>
-          remote!.connect(credential.secret, [
-            'get_public_key',
-            ...NostrConnectSigner.buildSigningPermissions(kinds),
-          ]),
+          remote!.connectNamed(
+            credential.secret,
+            ['get_public_key', ...NostrConnectSigner.buildSigningPermissions(kinds)],
+            metadata,
+          ),
         );
         if (ack !== 'ack' && ack !== credential.secret)
           throw new AccountError(

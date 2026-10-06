@@ -1,5 +1,11 @@
 # Cross-client and standalone release checks
 
+## Current migration scope — 2026-10-04
+
+[NIP-5D PR 7 migration](NIP5D-MIGRATION.md) has a separate real-service/browser fixture in `tests/services/nip5d-migration.test.ts`: directly signed new and legacy manifests, raw artifact verification, saved-state continuity, independent snapshot isolation, icons, required/optional domains and retained pinned revisions. These fixtures are independent of Soy's event builder, but are not an external client implementation.
+
+The pinned Paja 0.16.4 host below consumes the legacy format. The current interoperability runner therefore wraps freshly published Soy HTML in an explicitly legacy manifest built by the pinned upstream builder for that leg, while testing current Soy publication/source/Git separately. Do not infer PR 7 support by Paja or another external client from a passing legacy check. The dated 0.14.1 evidence below remains historical.
+
 Verified locally on **2026-09-20** for soyLI **0.14.1**, then published with website
 release `20260920084527457-12824`. The cross-client checks below use disposable
 identities and loopback Khatru, Blossom and GRASP services. Separate
@@ -8,12 +14,12 @@ records the public installer, downloads, website and protocol health checks.
 
 ## Independent host and publisher
 
-| Component | Version / revision |
-| --- | --- |
-| Independent host | [`@kehto/paja`](https://github.com/kehto/web) 0.16.4, dependencies pinned in the test fixture lockfile |
-| Upstream manifest builder | [`napplet/web` 956135b](https://github.com/napplet/web/tree/956135bfc41a2cff5e45d6c68d9f9a4d68c50531), `packages/cli/src/manifest.ts` |
-| Ordinary Nostr Git transport | ngit / git-remote-nostr 2.1.0 |
-| Soy host / starter | Existing shim 0.30.0 and maintained boilerplate pins; see [compatibility](COMPATIBILITY.md) |
+| Component                    | Version / revision                                                                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Independent host             | [`@kehto/paja`](https://github.com/kehto/web) 0.16.4, dependencies pinned in the test fixture lockfile                                |
+| Upstream manifest builder    | [`napplet/web` 956135b](https://github.com/napplet/web/tree/956135bfc41a2cff5e45d6c68d9f9a4d68c50531), `packages/cli/src/manifest.ts` |
+| Ordinary Nostr Git transport | ngit / git-remote-nostr 2.1.0                                                                                                         |
+| Soy host / starter           | Existing shim 0.30.0 and maintained boilerplate pins; see [compatibility](COMPATIBILITY.md)                                           |
 
 `tests/services/interoperability.test.ts` checks:
 

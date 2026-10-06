@@ -18,12 +18,20 @@ import { NameButton } from './name-button';
 import { NappletSocial } from './social-panel';
 import { RemixButton } from './remix-button';
 import { usePlayRoute } from '@/lib/use-play-route';
+import { socialScope } from '../../../../packages/protocol/src/social';
 
-export function PublicDetail({ napplet }: { napplet: PublicNapplet }) {
+export function PublicDetail({
+  napplet,
+  pinned = false,
+}: {
+  napplet: PublicNapplet;
+  pinned?: boolean;
+}) {
   const play = usePlayRoute();
-  const refresh = useProtocolRefresh(napplet.naddr ?? napplet.revisionId, () =>
-    findManifest(napplet.naddr ?? napplet.revisionId),
-  );
+  const reference = pinned ? napplet.revisionId : (napplet.naddr ?? napplet.revisionId);
+  // Relay hints may change during hydration; they do not create a new conversation.
+  const scope = socialScope(napplet.manifest).key;
+  const refresh = useProtocolRefresh(reference, () => findManifest(reference));
   if (typeof window !== 'undefined') seedCatalog([napplet]);
   const store = useEventStore();
   const artifactUrl = (() => {
@@ -41,7 +49,7 @@ export function PublicDetail({ napplet }: { napplet: PublicNapplet }) {
   }, [store, napplet.revisionId]);
   return (
     <NappletSocial
-      key={napplet.naddr ?? napplet.revisionId}
+      key={scope}
       reference={napplet.naddr ?? napplet.revisionId}
       manifest={napplet.manifest}
       title={napplet.title}
@@ -58,7 +66,7 @@ export function PublicDetail({ napplet }: { napplet: PublicNapplet }) {
           <div className="detail-heading">
             <div>
               <span className="eyebrow">
-                NAPPLET{napplet.manifest.kind === 5129 ? ' / PINNED RELEASE' : ''}
+                NAPPLET{pinned || napplet.manifest.kind === 5129 ? ' / PINNED RELEASE' : ''}
               </span>
               <h1>
                 {napplet.title}
@@ -83,7 +91,11 @@ export function PublicDetail({ napplet }: { napplet: PublicNapplet }) {
                 </Link>
               </Button>
               {napplet.naddr && <NameButton naddr={napplet.naddr} author={napplet.pubkey} />}
-              <LifecycleManager manifest={napplet.manifest} relays={napplet.relays} metadata={napplet.metadata} />
+              <LifecycleManager
+                manifest={napplet.manifest}
+                relays={napplet.relays}
+                metadata={napplet.metadata}
+              />
               <RemixButton revision={napplet.revisionId} title={napplet.title} />
             </div>
           </div>

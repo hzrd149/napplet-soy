@@ -1,5 +1,9 @@
 import type { Filter } from 'nostr-tools';
 import {
+  comparePublications,
+  publicationKey,
+} from '../../../../packages/protocol/src/publication-order';
+import {
   decodeAddress,
   verifiedEvent,
   encodeAddress,
@@ -7,11 +11,26 @@ import {
   type SignedEvent,
   type GallerySearch,
 } from '../../../../packages/protocol/src';
-import { validateManifest } from '../../../../packages/protocol/src/manifest';
-import { discoveryTarget } from '../../../../packages/protocol/src/discovery';
+import {
+  legacySnapshotAddress,
+  manifestFormat,
+  validateManifest,
+} from '../../../../packages/protocol/src/manifest';
+import {
+  discoveryTarget,
+  targetedDiscoveryFilters,
+} from '../../../../packages/protocol/src/discovery';
 import { appReferences, latestMetadata } from '../../../../packages/protocol/src/preview';
 import { publicNapplet, type PublicNapplet } from '../../../../packages/backend/src/public-model';
-import { matchesGallery, topicFacets } from '../../../../packages/protocol/src/topics';
+import {
+  discoveryFacets,
+  matchesGallery,
+  topicFacets,
+  type DiscoverySearch,
+} from '../../../../packages/protocol/src/topics';
+import { resolveManifestIcon } from '../../../../packages/client/src/manifest-icon';
+import { indexedPinnedManifest } from '../../../../packages/client/src/pinned-manifest';
+import { standalonePresentationKey } from '../../../../packages/protocol/src/presentation-pairs';
 import {
   latestProfile,
   profilePubkey,
@@ -22,6 +41,10 @@ import { blossomBytes, downloadBytes, resourceUrl } from '../../../../packages/c
 import { protocolClient, network, manifestAllowed, blocked, featuredRules } from './network';
 
 const entries = new Map<string, PublicNapplet>();
+const firstPublications = new Map<string, number>();
+// Retain bounded verified named presentation observations across replacements.
+// A browser only coalesces pairs it has actually observed; this grants no authority.
+const presentationParents = new Map<string, SignedEvent>();
 const localDeletions = new Map<string, number>();
 function locallyRemoved(e: SignedEvent) {
   const address = `${e.kind}:${e.pubkey}:${e.kind === 15129 ? '' : (e.tags.find((t) => t[0] === 'd')?.[1] ?? '')}`;
@@ -34,12 +57,49 @@ function locallyRemoved(e: SignedEvent) {
 const metadataCache = new Map<string, { at: number; events: SignedEvent[] }>();
 const availabilityCache = new Map<string, { at: number; ready: boolean; size: number | null }>();
 const manifestCache = new Map<string, SignedEvent>();
+const deletionReads = new Map<string, { at: number; events: SignedEvent[] }>();
+const pendingDeletions = new Map<string, Promise<SignedEvent[]>>();
+async function readDeletions(filters: Filter[], hints: string[]) {
+  const client = protocolClient();
+  const key = JSON.stringify([filters, [...hints, ...network().relays]]);
+  const cached = deletionReads.get(key);
+  let events = cached && cached.at > Date.now() - 15000 ? cached.events : undefined;
+  if (!events) {
+    let pending = pendingDeletions.get(key);
+    if (!pending) {
+      pending = client
+        .query(filters, hints)
+        .then((events) => {
+          deletionReads.set(key, { at: Date.now(), events });
+          while (deletionReads.size > 512) deletionReads.delete(deletionReads.keys().next().value!);
+          return events;
+        })
+        .finally(() => pendingDeletions.delete(key));
+      pendingDeletions.set(key, pending);
+    }
+    events = await pending;
+  }
+  // A recent negative read never hides a newly observed signed deletion.
+  return [...new Map([...events, ...client.cached(filters)].map((e) => [e.id, e])).values()];
+}
 const newest = (a: SignedEvent, b: SignedEvent) =>
   b.created_at - a.created_at || a.id.localeCompare(b.id);
+const catalogKey = (event: SignedEvent) =>
+  event.kind === 5129
+    ? event.id
+    : `${event.kind}:${event.pubkey}:${event.kind === 15129 ? '' : event.tags.find((t) => t[0] === 'd')?.[1]}`;
 export function seedCatalog(values: PublicNapplet[]) {
   for (const n of values) {
     if (!manifestAllowed(n.manifest) || locallyRemoved(n.manifest)) continue;
+    const key = publicationKey(n.manifest);
+    firstPublications.set(
+      key,
+      Math.min(firstPublications.get(key) ?? Infinity, n.firstPublishedAt ?? n.manifest.created_at),
+    );
+    n.firstPublishedAt = firstPublications.get(key);
     entries.set(n.revisionId, n);
+    const presentation = n.manifest.kind !== 5129 && standalonePresentationKey(n.manifest);
+    if (presentation) presentationParents.set(presentation, n.manifest);
     if (!availabilityCache.has(n.revisionId))
       availabilityCache.set(n.revisionId, {
         at: Date.now(),
@@ -53,7 +113,11 @@ export function seedCatalog(values: PublicNapplet[]) {
       ...(n.video ? [n.video.descriptor] : []),
     ]);
   }
+  while (firstPublications.size > 2000)
+    firstPublications.delete(firstPublications.keys().next().value!);
   while (entries.size > 1000) entries.delete(entries.keys().next().value!);
+  while (presentationParents.size > 1000)
+    presentationParents.delete(presentationParents.keys().next().value!);
   while (metadataCache.size > 1000) metadataCache.delete(metadataCache.keys().next().value!);
   while (availabilityCache.size > 1000)
     availabilityCache.delete(availabilityCache.keys().next().value!);
@@ -77,18 +141,39 @@ export async function findManifest(reference: string, hints: string[] = []) {
         limit: 5,
       }
     : { ids: [target.type === 'snapshot' ? target.id : ''], kinds: [35129, 15129, 5129], limit: 1 };
-  const result = (await protocolClient().query([filter], [...hints, ...target.hints])).sort(
-    newest,
-  )[0];
+  let result = target.type === 'snapshot' ? manifestCache.get(target.id) : undefined;
+  if (!result) {
+    try {
+      result =
+        target.type === 'snapshot'
+          ? await protocolClient().queryEvent(
+              target.id,
+              [35129, 15129, 5129],
+              [...hints, ...target.hints],
+            )
+          : (await protocolClient().query([filter], [...hints, ...target.hints])).sort(newest)[0];
+    } catch (error) {
+      if (target.type !== 'snapshot') throw error;
+      // A replaceable event may have been pruned by every relay. The index can
+      // return its original signature; validation and exact-ID checks still apply.
+    }
+    if (!result && target.type === 'snapshot')
+      result = (await indexedPinnedManifest(target.id)) ?? undefined;
+  }
   if (!result) return null;
   await validateManifest(result);
+  if (target.type === 'snapshot' && result.id !== target.id)
+    throw new Error('A different manifest cannot replace a pinned revision.');
+  const expiration = result.tags.find((tag) => tag[0] === 'expiration')?.[1];
+  if (expiration && /^\d+$/.test(expiration) && Number(expiration) <= Date.now() / 1000)
+    return null;
   if (!manifestAllowed(result) || locallyRemoved(result)) return null;
   // NIP-09 deletion requests are authored by the event owner; a later valid release survives.
   const ownerAddress =
     result.kind === 5129
-      ? result.tags.find((t) => t[0] === 'a' && t[1]?.split(':')[1] === result.pubkey)?.[1]
+      ? legacySnapshotAddress(result)
       : `${result.kind}:${result.pubkey}:${result.kind === 15129 ? '' : (result.tags.find((t) => t[0] === 'd')?.[1] ?? '')}`;
-  const deletes = await protocolClient().query(
+  const deletes = await readDeletions(
     [
       { kinds: [5], authors: [result.pubkey], '#e': [result.id], limit: 20 },
       ...(ownerAddress
@@ -123,6 +208,7 @@ export async function hydrateNapplet(event: SignedEvent, hints: string[] = []) {
     n.preview = previous.preview;
     n.video = previous.video;
   }
+  const iconTask = resolveManifestIcon(event, network().blossom);
   const metadata: SignedEvent[] = [];
   let metadataResolved = false;
   await Promise.all(
@@ -134,7 +220,10 @@ export async function hydrateNapplet(event: SignedEvent, hints: string[] = []) {
           cached && cached.at > Date.now() - 60000
             ? cached.events
             : await protocolClient().query(
-                [{ kinds: [ref.kind], authors: [ref.pubkey], '#d': [ref.identifier], limit: 3 }],
+                [
+                  { kinds: [ref.kind], authors: [ref.pubkey], '#d': [ref.identifier], limit: 3 },
+                  { kinds: [0], authors: [ref.pubkey], limit: 3 },
+                ],
                 ref.relay ? [ref.relay] : hints,
               );
         metadataCache.set(key, { at: Date.now(), events: candidates });
@@ -143,11 +232,7 @@ export async function hydrateNapplet(event: SignedEvent, hints: string[] = []) {
         if (descriptor && manifestAllowed(descriptor)) {
           metadata.push(descriptor);
           if (descriptor.kind === 31990 && descriptor.content === '') {
-            const profiles = await protocolClient().query(
-              [{ kinds: [0], authors: [descriptor.pubkey], limit: 1 }],
-              hints,
-            );
-            const profile = latestProfile(profiles, descriptor.pubkey);
+            const profile = latestProfile(candidates, descriptor.pubkey);
             if (profile && manifestAllowed(profile)) metadata.push(profile);
           }
         }
@@ -157,10 +242,11 @@ export async function hydrateNapplet(event: SignedEvent, hints: string[] = []) {
     }),
   );
   if (metadataResolved) {
-    n.preview = null;
+    if (n.preview?.descriptor.id !== event.id) n.preview = null;
     n.video = null;
   }
   n.metadata = metadata;
+  await iconTask;
   // Availability is a lightweight direct storage probe; executable bytes are hash-checked on play.
   if (n.availability !== 'host-required') {
     const servers = (await validateManifest(event)).servers;
@@ -209,31 +295,90 @@ export async function lookupProtocol(
 }
 let catalogFresh = 0;
 let catalogPending: Promise<PublicNapplet[]> | undefined;
-export function queryCatalog(author?: string): Promise<PublicNapplet[]> {
+const targetedPending = new Map<string, Promise<PublicNapplet[]>>();
+const targetedFresh = new Map<string, number>();
+/** Four batches at a time, avoiding a deadline per author/descriptor group. */
+async function forGroups<T>(items: T[], size: number, read: (group: T[]) => Promise<void>) {
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(4, Math.ceil(items.length / size)) }, async () => {
+      while (next < items.length) {
+        const start = next;
+        next += size;
+        await read(items.slice(start, start + size));
+      }
+    }),
+  );
+}
+export function queryCatalog(author?: string, search?: DiscoverySearch): Promise<PublicNapplet[]> {
+  if (
+    search &&
+    (search.archetype || search.intent || search.requiredDomain || search.optionalDomain)
+  ) {
+    const key = JSON.stringify([
+      author,
+      search.archetype,
+      search.intent,
+      search.requiredDomain,
+      search.optionalDomain,
+    ]);
+    if ((targetedFresh.get(key) ?? 0) > Date.now() - 30000)
+      return Promise.resolve([...entries.values()].filter(manifestEntry));
+    const pending = targetedPending.get(key);
+    if (pending) return pending;
+    const query = refreshCatalog(author, search)
+      .then((result) => {
+        targetedFresh.set(key, Date.now());
+        if (targetedFresh.size > 128) targetedFresh.delete(targetedFresh.keys().next().value!);
+        return result;
+      })
+      .finally(() => targetedPending.delete(key));
+    targetedPending.set(key, query);
+    return query;
+  }
   if (author) return refreshCatalog(author);
   return (catalogPending ??= refreshCatalog().finally(() => {
     catalogPending = undefined;
   }));
 }
-async function refreshCatalog(author?: string) {
-  if (!author && catalogFresh > Date.now() - 30000)
+async function refreshCatalog(author?: string, search?: DiscoverySearch) {
+  if (!author && !search && catalogFresh > Date.now() - 30000)
     return [...entries.values()].filter(manifestEntry);
-  const events = await protocolClient().query([
-    { kinds: [35129, 15129], ...(author ? { authors: [author] } : {}), limit: 300 },
-  ]);
+  const filters = search
+    ? targetedDiscoveryFilters(
+        {
+          archetypes: search.archetype ? [search.archetype] : [],
+          intents: search.intent ? [search.intent] : [],
+          requiredDomains: search.requiredDomain ? [search.requiredDomain] : [],
+          optionalDomains: search.optionalDomain ? [search.optionalDomain] : [],
+        },
+        { limit: 300, legacyRequirements: true },
+      ).fallback
+    : [{ kinds: [35129, 15129, 5129], limit: 300 }];
+  const events = await protocolClient().query(
+    filters.map((filter) => ({
+      ...filter,
+      ...(author ? { authors: [author] } : {}),
+    })),
+  );
   const winners = new Map<string, SignedEvent>();
   for (const e of events.sort(newest)) {
-    const key = `${e.kind}:${e.pubkey}:${e.kind === 15129 ? '' : e.tags.find((t) => t[0] === 'd')?.[1]}`;
+    const key = catalogKey(e);
     if (!winners.has(key)) winners.set(key, e);
   }
+  // Targeted reads must not replace a known newer publication with an older match.
+  if (search)
+    for (const entry of entries.values()) {
+      const e = entry.manifest;
+      const key = catalogKey(e);
+      const candidate = winners.get(key);
+      if (candidate && newest(e, candidate) < 0) winners.set(key, e);
+    }
   const authors = [...new Set(events.map((e) => e.pubkey))];
   const deletions: SignedEvent[] = [];
-  for (let i = 0; i < authors.length; i += 64)
-    deletions.push(
-      ...(await protocolClient().query([
-        { kinds: [5], authors: authors.slice(i, i + 64), limit: 300 },
-      ])),
-    );
+  await forGroups(authors, 64, async (group) => {
+    deletions.push(...(await protocolClient().query([{ kinds: [5], authors: group, limit: 300 }])));
+  });
   for (const [key, e] of winners) {
     const removed = deletions.some(
       (d) =>
@@ -242,6 +387,7 @@ async function refreshCatalog(author?: string) {
         d.tags.some((t) => (t[0] === 'e' && t[1] === e.id) || (t[0] === 'a' && t[1] === key)),
     );
     if (!manifestAllowed(e) || removed || locallyRemoved(e)) {
+      entries.delete(e.id);
       for (const [id, n] of entries)
         if (
           n.pubkey === e.pubkey &&
@@ -260,16 +406,22 @@ async function refreshCatalog(author?: string) {
         .map((r) => [`${r.kind}:${r.pubkey}:${r.identifier}`, r]),
     ).values(),
   ];
-  for (let i = 0; i < refs.length; i += 32) {
-    const group = refs.slice(i, i + 32);
+  await forGroups(refs, 32, async (group) => {
     try {
       const found = await protocolClient().query(
-        group.map((r) => ({
-          kinds: [r.kind],
-          authors: [r.pubkey],
-          '#d': [r.identifier],
-          limit: 3,
-        })),
+        [
+          ...group.map((r) => ({
+            kinds: [r.kind],
+            authors: [r.pubkey],
+            '#d': [r.identifier],
+            limit: 3,
+          })),
+          {
+            kinds: [0],
+            authors: [...new Set(group.map((r) => r.pubkey))],
+            limit: group.length * 3,
+          },
+        ],
         group.flatMap((r) => (r.relay ? [r.relay] : [])),
       );
       for (const ref of group)
@@ -278,7 +430,7 @@ async function refreshCatalog(author?: string) {
           events: found,
         });
     } catch {}
-  }
+  });
   let index = 0;
   // Four concurrent manifest/metadata/storage resolutions per browser.
   await Promise.all(
@@ -294,18 +446,38 @@ async function refreshCatalog(author?: string) {
   // Replaceable events supersede old revisions in the browser's listing.
   for (const [id, entry] of entries) {
     const e = entry.manifest,
-      key = `${e.kind}:${e.pubkey}:${e.kind === 15129 ? '' : e.tags.find((t) => t[0] === 'd')?.[1]}`;
-    if (e.kind !== 5129 && (!author || e.pubkey === author) && winners.get(key)?.id !== id)
+      key = catalogKey(e);
+    if (
+      e.kind !== 5129 &&
+      (!author || e.pubkey === author) &&
+      (!search || winners.has(key)) &&
+      winners.get(key)?.id !== id
+    )
       entries.delete(id);
   }
-  if (!author) catalogFresh = Date.now();
+  if (!author && !search) catalogFresh = Date.now();
   return [...entries.values()].filter((n) => manifestEntry(n) && (!author || n.pubkey === author));
 }
 export const availableCatalog = () => [...entries.values()].filter(manifestEntry);
-const manifestEntry = (n: PublicNapplet) =>
-  (n.manifest.kind !== 5129 || featured(n)) &&
-  manifestAllowed(n.manifest) &&
-  !locallyRemoved(n.manifest);
+const manifestEntry = (n: PublicNapplet) => {
+  if (!manifestAllowed(n.manifest) || locallyRemoved(n.manifest)) return false;
+  if (n.manifest.kind !== 5129 || featured(n)) return true;
+  const presentation = standalonePresentationKey(n.manifest);
+  const parent = presentation && presentationParents.get(presentation);
+  if (parent && manifestAllowed(parent) && !locallyRemoved(parent)) return false;
+  const address = legacySnapshotAddress(n.manifest);
+  return (
+    !address ||
+    ![...entries.values()].some(
+      (entry) =>
+        entry.manifest.kind !== 5129 &&
+        `${entry.manifest.kind}:${entry.pubkey}:${entry.manifest.kind === 15129 ? '' : entry.slug}` ===
+          address &&
+        manifestAllowed(entry.manifest) &&
+        !locallyRemoved(entry.manifest),
+    )
+  );
+};
 export function featured(n: PublicNapplet) {
   const e = n.manifest,
     address = `${e.kind}:${e.pubkey}:${e.kind === 15129 ? '' : e.tags.find((t) => t[0] === 'd')?.[1]}`;
@@ -333,12 +505,19 @@ export function browseProtocol(search: GallerySearch) {
   const visible = all.filter((n) => search.unavailable || n.availability === 'ready');
   const matches = visible
     .filter((n) => matchesGallery(n, search))
-    .sort((a, b) => newest(a.manifest, b.manifest));
+    .sort((a, b) =>
+      comparePublications(
+        { ...a, firstPublishedAt: firstPublications.get(publicationKey(a.manifest)) },
+        { ...b, firstPublishedAt: firstPublications.get(publicationKey(b.manifest)) },
+        search.sort,
+      ),
+    );
   const pages = Math.max(1, Math.ceil(matches.length / 24)),
     page = Math.min(search.page ?? 1, pages);
   return {
     napplets: matches.slice((page - 1) * 24, page * 24),
     topics: topicFacets(visible),
+    discovery: discoveryFacets(visible),
     total: visible.length,
     unavailableCount: all.filter((n) => n.availability !== 'ready' && matchesGallery(n, search))
       .length,
@@ -389,7 +568,9 @@ export const directSource = createSourceBrowser({
   manifest: (id) => findManifest(id),
   artifact: async (hash) => {
     const n = [...manifestCache.values()].find((e) =>
-      e.tags.some((t) => t[0] === 'path' && t[2] === hash),
+      manifestFormat(e) === 'standalone'
+        ? e.tags.some((t) => t[0] === 'x' && t.length === 2 && t[1] === hash)
+        : e.tags.some((t) => t[0] === 'path' && t[2] === hash),
     );
     return blossomBytes(
       hash,
@@ -405,17 +586,25 @@ export const directSource = createSourceBrowser({
 });
 
 export async function featuredProtocol() {
-  const selected: PublicNapplet[] = [];
-  for (const rule of featuredRules().slice(0, 12)) {
-    try {
-      const event = await findManifest(rule.target);
-      if (!event) continue;
-      const n = await hydrateNapplet(event);
-      if (n.availability === 'ready')
-        selected.push(rule.type === 'event' ? { ...n, naddr: null } : n);
-    } catch {}
-  }
-  return selected;
+  const rules = featuredRules().slice(0, 12),
+    selected: (PublicNapplet | undefined)[] = [];
+  let index = 0;
+  await Promise.all(
+    Array.from({ length: 4 }, async () => {
+      while (index < rules.length) {
+        const slot = index++,
+          rule = rules[slot];
+        try {
+          const event = await findManifest(rule.target);
+          if (!event) continue;
+          const n = await hydrateNapplet(event);
+          if (n.availability === 'ready')
+            selected[slot] = rule.type === 'event' ? { ...n, naddr: null } : n;
+        } catch {}
+      }
+    }),
+  );
+  return selected.filter((n): n is PublicNapplet => !!n);
 }
 
 /** Apply author actions immediately; relay/index refresh continues independently. */

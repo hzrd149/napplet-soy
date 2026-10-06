@@ -1,9 +1,10 @@
 import { featuredGallery } from './featured';
 import { manifestFeatured } from '../../moderation/src/policy';
 import type { GallerySearch } from '../../protocol/src';
-import { matchesGallery, topicFacets } from '../../protocol/src/topics';
+import { discoveryFacets, matchesGallery, topicFacets } from '../../protocol/src/topics';
 import type { PublicNapplet } from './public-model';
 import { catalogStatus, communityEntries } from './public-catalog';
+import { comparePublications } from '../../protocol/src/publication-order';
 
 export const GALLERY_PAGE_SIZE = 24;
 export function galleryPage(entries: PublicNapplet[], search: GallerySearch) {
@@ -11,10 +12,7 @@ export function galleryPage(entries: PublicNapplet[], search: GallerySearch) {
   const visible = search.unavailable ? catalog : catalog.filter((n) => n.availability === 'ready');
   const matches = visible
     .filter((n) => matchesGallery(n, search))
-    .sort(
-      (a, b) =>
-        b.manifest.created_at - a.manifest.created_at || a.revisionId.localeCompare(b.revisionId),
-    );
+    .sort((a, b) => comparePublications(a, b, search.sort));
   const pages = Math.max(1, Math.ceil(matches.length / GALLERY_PAGE_SIZE));
   const page = Math.min(search.page ?? 1, pages);
   return {
@@ -24,6 +22,7 @@ export function galleryPage(entries: PublicNapplet[], search: GallerySearch) {
     matches: matches.length,
     total: visible.length,
     topics: topicFacets(visible),
+    discovery: discoveryFacets(visible),
     unavailableCount: catalog.filter((n) => n.availability !== 'ready' && matchesGallery(n, search))
       .length,
   };

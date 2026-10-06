@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readlink, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Accounts, type Vault } from '../../../packages/identity/src/accounts';
@@ -235,6 +235,43 @@ test('diff review includes staged, deleted and new files and withholds likely se
     );
     await expect(workingDiff(f.directory, state.revision, '../accounts.json')).rejects.toThrow(
       'Choose a changed file',
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test('Git workshop reviews safe aliases and invalidates review when equal-content targets change', async () => {
+  const f = await fixture();
+  try {
+    await Bun.write(join(f.directory, 'AGENTS.md'), '# Shared guidance\n');
+    await Bun.write(join(f.directory, 'OTHER.md'), '# Shared guidance\n');
+    await checkpoint(f.directory, 'Add agent guidance');
+    await symlink('AGENTS.md', join(f.directory, 'CLAUDE.md'));
+    const added = await workingTree(f.directory);
+    expect(added.changed).toContain('CLAUDE.md');
+    expect((await workingDiff(f.directory, added.revision, 'CLAUDE.md')).diff).toBe(
+      'New file alias: AGENTS.md',
+    );
+    await checkpoint(f.directory, 'Share the agent guidance');
+    const committed = await workingTree(f.directory);
+    expect(committed.changed).toEqual([]);
+    await rm(join(f.directory, 'CLAUDE.md'));
+    await symlink('OTHER.md', join(f.directory, 'CLAUDE.md'));
+    const changed = await workingTree(f.directory);
+    expect(changed.revision).not.toBe(committed.revision);
+    expect(changed.changed).toContain('CLAUDE.md');
+    await expect(workingDiff(f.directory, committed.revision, 'CLAUDE.md')).rejects.toThrow(
+      'Files changed',
+    );
+    const diff = await workingDiff(f.directory, changed.revision, 'CLAUDE.md');
+    expect(diff.diff).toContain('-AGENTS.md');
+    expect(diff.diff).toContain('+OTHER.md');
+    expect(await readlink(join(f.directory, 'CLAUDE.md'))).toBe('OTHER.md');
+    await Bun.write(join(f.directory, 'OTHER.md'), 'nsec1' + 'a'.repeat(58));
+    const sensitive = await workingTree(f.directory);
+    await expect(workingDiff(f.directory, sensitive.revision, 'CLAUDE.md')).rejects.toThrow(
+      'likely credential',
     );
   } finally {
     await f.close();

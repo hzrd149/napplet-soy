@@ -18,12 +18,69 @@ const chunks = <T>(items: T[], size = 64) =>
 export async function readSocial(
   manifest: SignedEvent,
   hints: string[] = [],
-  signal?: AbortSignal,
+  signal = AbortSignal.timeout(30000),
+  onUpdate?: (data: Awaited<ReturnType<typeof socialSnapshot>>) => void,
 ) {
   await validateManifest(manifest);
   const scope = socialScope(manifest),
     client = protocolClient();
-  const filters: Filter[] = [
+  const filters = socialFilters(manifest);
+  const raw = new Map((history.get(scope.key) ?? []).filter(manifestAllowed).map((e) => [e.id, e]));
+  client.cached(filters).forEach((e) => raw.set(e.id, e));
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const emit = async () => {
+    const value = await socialSnapshot(manifest, hints, [...raw.values()]);
+    if (!signal.aborted) onUpdate?.(value);
+    return value;
+  };
+  const schedule = () => {
+    if (!timer)
+      timer = setTimeout(() => {
+        timer = undefined;
+        void emit().catch(() => {});
+      }, 40);
+  };
+  const add = (e: SignedEvent) => {
+    raw.set(e.id, e);
+    schedule();
+  };
+  try {
+    if (raw.size) await emit();
+    await client.query(filters, hints, signal, add, false, schedule);
+    // References, reactions and author metadata share one parallel relay phase.
+    const refs = [
+      ...new Set(
+        [...raw.values()].flatMap((e) =>
+          e.tags
+            .filter((t) => ['e', 'E'].includes(t[0]) && /^[a-f0-9]{64}$/.test(t[1]))
+            .map((t) => t[1]),
+        ),
+      ),
+    ]
+      .filter((id) => id !== manifest.id && !raw.has(id))
+      .slice(0, 128);
+    const comments = [...raw.values()]
+      .filter((e) => rootComment(e, scope))
+      .map((e) => e.id)
+      .slice(0, 200);
+    const authors = [
+      ...new Set([manifest.pubkey, ...[...raw.values()].map((e) => e.pubkey)]),
+    ].slice(0, 256);
+    const related: Filter[] = [
+      ...chunks(refs).map((ids) => ({ ids, kinds: [35129, 15129, 5129, 1111], limit: 200 })),
+      ...chunks(comments).map((ids) => ({ kinds: [7, 9735], '#e': ids, limit: 200 })),
+      ...chunks(authors).map((authors) => ({ kinds: [0, 5], authors, limit: 200 })),
+    ];
+    if (related.length) await client.query(related, hints, signal, add);
+    signal.throwIfAborted();
+    return await emit();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+function socialFilters(manifest: SignedEvent): Filter[] {
+  const scope = socialScope(manifest);
+  return [
     {
       kinds: [1111],
       ...(scope.address ? { '#A': [scope.address] } : { '#E': [manifest.id] }),
@@ -32,10 +89,20 @@ export async function readSocial(
     { kinds: [7, 9735], '#e': [manifest.id], limit: 200 },
     ...(scope.address ? [{ kinds: [7, 9735], '#a': [scope.address], limit: 200 }] : []),
   ];
-  const raw = new Map((history.get(scope.key) ?? []).filter(manifestAllowed).map((e) => [e.id, e]));
-  const add = (events: SignedEvent[]) => events.forEach((e) => raw.set(e.id, e));
-  add(await client.query(filters, hints, signal));
-  // Resolve referenced releases, reply parents and comment reactions before reducing.
+}
+/** Re-reduce the verified store after an acknowledgement, including cached deletions. */
+export async function socialSnapshot(
+  manifest: SignedEvent,
+  hints: string[],
+  inputs: SignedEvent[] = [],
+) {
+  const scope = socialScope(manifest),
+    client = protocolClient();
+  const raw = new Map(
+    [...(history.get(scope.key) ?? []), ...inputs, ...client.cached(socialFilters(manifest))].map(
+      (e) => [e.id, e],
+    ),
+  );
   const refs = [
     ...new Set(
       [...raw.values()].flatMap((e) =>
@@ -44,29 +111,27 @@ export async function readSocial(
           .map((t) => t[1]),
       ),
     ),
-  ]
-    .filter((id) => id !== manifest.id && !raw.has(id))
-    .slice(0, 128);
-  for (const ids of chunks(refs))
-    add(
-      await client.query([{ ids, kinds: [35129, 15129, 5129, 1111], limit: 200 }], hints, signal),
-    );
+  ].slice(0, 128);
+  if (refs.length)
+    client.store
+      .getByFilters([{ ids: refs, kinds: [35129, 15129, 5129, 1111] }])
+      .forEach((e) => raw.set(e.id, e));
   const comments = [...raw.values()]
     .filter((e) => rootComment(e, scope))
     .map((e) => e.id)
     .slice(0, 200);
-  for (const ids of chunks(comments))
-    add(await client.query([{ kinds: [7, 9735], '#e': ids, limit: 200 }], hints, signal));
-  const authors = [
-    ...new Set(
-      [manifest.pubkey, ...raw.values()].map((e) => (typeof e === 'string' ? e : e.pubkey)),
-    ),
-  ].slice(0, 256);
-  for (const keys of chunks(authors))
-    add(await client.query([{ kinds: [0, 5], authors: keys, limit: 200 }], hints, signal));
+  if (comments.length)
+    client.store
+      .getByFilters([{ kinds: [7, 9735], '#e': comments }])
+      .forEach((e) => raw.set(e.id, e));
+  const authors = [...new Set([manifest.pubkey, ...[...raw.values()].map((e) => e.pubkey)])].slice(
+    0,
+    256,
+  );
+  client.cached([{ kinds: [0, 5], authors }]).forEach((e) => raw.set(e.id, e));
   const manifests = new Map([[manifest.id, manifest]]);
   for (const e of raw.values())
-    if ([35129, 15129, 5129].includes(e.kind))
+    if ([35129, 15129, 5129].includes(e.kind) && manifestAllowed(e))
       try {
         await validateManifest(e);
         manifests.set(e.id, e);

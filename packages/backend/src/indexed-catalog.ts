@@ -52,8 +52,10 @@ export async function indexedEntries() {
       if (store.removed(event) || manifestBlocked(event)) return null;
       const old = projectionCache.get(row.id);
       if (old?.event === row.event && old.projection === row.projection && old.key === row.key)
-        return old.entry;
-      const entry = indexedProjection(row, hints);
+        return old.entry.then((entry) =>
+          entry ? { ...entry, firstPublishedAt: store.firstPublishedAt(event) } : null,
+        );
+      const entry = indexedProjection(row, hints, store.firstPublishedAt(event));
       projectionCache.set(row.id, {
         event: row.event,
         projection: row.projection,
@@ -88,7 +90,7 @@ export function lookupKey(input: Lookup) {
 export async function indexedLookup(input: Lookup) {
   const key = lookupKey(input),
     store = indexStore(),
-    // /r/<id> can pin either a snapshot or a still-retained replaceable manifest.
+    // /r/<id> can pin either a snapshot or an archived signed replaceable manifest.
     // Replaceable rows are keyed by address, so an exact event lookup must use id.
     row = key ? (input.type === 'snapshot' ? store?.revision(key) : store?.row(key)) : null;
   return {
@@ -97,7 +99,11 @@ export async function indexedLookup(input: Lookup) {
       row &&
       !manifestBlocked(JSON.parse(row.event)) &&
       !indexStore()!.removed(JSON.parse(row.event))
-        ? await indexedProjection(row, relays())
+        ? await indexedProjection(
+            row,
+            relays(),
+            indexStore()!.firstPublishedAt(JSON.parse(row.event)),
+          )
         : null,
   };
 }
@@ -107,7 +113,7 @@ export async function indexedRevision(id: string) {
   return row &&
     !manifestBlocked(JSON.parse(row.event)) &&
     !indexStore()!.removed(JSON.parse(row.event))
-    ? indexedProjection(row, relays())
+    ? indexedProjection(row, relays(), indexStore()!.firstPublishedAt(JSON.parse(row.event)))
     : null;
 }
 export async function indexedArtifact(hash: string) {
@@ -119,7 +125,7 @@ export async function indexedArtifact(hash: string) {
       .map((row) =>
         store.removed(JSON.parse(row.event)) || manifestBlocked(JSON.parse(row.event))
           ? null
-          : indexedProjection(row, relays()),
+          : indexedProjection(row, relays(), indexStore()!.firstPublishedAt(JSON.parse(row.event))),
       ),
   );
   const entry = entries.find((n) => n?.artifactHash === hash && n.availability === 'ready');

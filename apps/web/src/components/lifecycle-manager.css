@@ -26,6 +26,17 @@
   display: grid;
   gap: 8px;
 }
+.lifecycle-release-inventory ul {
+  display: grid;
+  gap: 10px;
+  padding-left: 18px;
+  font-size: 13px;
+}
+.lifecycle-release-inventory code {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
 .lifecycle-steps li {
   display: grid;
   grid-template-columns: 135px 1fr;

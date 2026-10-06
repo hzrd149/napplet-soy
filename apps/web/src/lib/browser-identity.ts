@@ -18,6 +18,7 @@ import {
   type SignerOptions,
 } from '../../../../packages/identity/src/signer';
 import { verifiedEvent, type SignedEvent } from '../../../../packages/protocol/src';
+import { browserConnectionName } from './connection-name';
 
 type Template = Pick<SignedEvent, 'kind' | 'created_at' | 'tags' | 'content'>;
 type Method = 'extension' | 'remote' | 'key';
@@ -60,6 +61,7 @@ export class BrowserIdentity {
   constructor(
     private network: Network = 'public',
     private vault?: SessionVault,
+    private connectionName = browserConnectionName,
   ) {
     this.accounts.registerType(SessionAccount);
     vault?.subscribe?.((revision) => {
@@ -202,6 +204,7 @@ export class BrowserIdentity {
           signal,
           expectedPubkey: account.pubkey,
           kinds: websiteKinds,
+          name: this.connectionName,
           ...this.feedback(feedback, signal),
         }),
       }),
@@ -411,6 +414,7 @@ export class BrowserIdentity {
         const signer = await openCredential(credential, this.network, {
           signal,
           kinds: websiteKinds,
+          name: this.connectionName,
           ...this.feedback(feedback, signal),
         });
         delete credential.secret;
@@ -432,6 +436,7 @@ export class BrowserIdentity {
           signal,
           kinds: websiteKinds,
           timeoutMs: 120000,
+          name: this.connectionName,
           onPairing,
           ...this.feedback(feedback, signal),
         }),

@@ -18,7 +18,7 @@ import pins from '../fixtures/interoperability/pins.json';
 // Explicit external checkouts/packages, kept out of the production dependency graph.
 const enabled = process.env.SOY_INTEROP_PAJA && process.env.SOY_INTEROP_UPSTREAM ? test : test.skip;
 enabled(
-  'Soy publication runs in independent Paja; upstream publication runs in Soy; ngit reads the remix remote',
+  'Soy artifact runs in pinned legacy Paja; upstream legacy publication runs in Soy; ngit reads the remix remote',
   async () => {
     const pajaPath = resolve(process.env.SOY_INTEROP_PAJA!);
     const upstream = resolve(process.env.SOY_INTEROP_UPSTREAM!);
@@ -124,8 +124,33 @@ enabled(
         identifier: job.plan.identifier,
         relays: [services.targets.relay],
       });
+      // Paja 0.16.4 and this upstream builder predate standalone NIP-5D. Retain
+      // their useful legacy-reader check by wrapping the freshly published Soy
+      // bytes in an explicitly legacy manifest. This is not evidence that this
+      // pinned independent client supports the new standalone wire contract.
+      const legacyReaderManifest = finalizeEvent(
+        await upstreamManifest.createSiteManifestTemplate(
+          { target: 'named', dTag: 'legacy-reader-fixture' },
+          [{ path: '/index.html', sha256: job.plan.artifactHash }],
+          {
+            servers: [services.targets.blossom],
+            metadataTags: [
+              ['requires', 'resource'],
+              ['requires', 'config'],
+            ],
+          },
+        ),
+        generateSecretKey(),
+      );
+      await client.publish(legacyReaderManifest, [services.targets.relay]);
+      const legacyPointer = nip19.naddrEncode({
+        kind: legacyReaderManifest.kind,
+        pubkey: legacyReaderManifest.pubkey,
+        identifier: 'legacy-reader-fixture',
+        relays: [services.targets.relay],
+      });
       const pajaConfig = paja.createPajaRuntimeHostConfig({
-        pointer,
+        pointer: legacyPointer,
         relays: [services.targets.relay],
         blossomServers: [services.targets.blossom],
         maxWaitMs: 5000,
@@ -178,8 +203,8 @@ enabled(
         method: 'PUT',
         headers: {
           Authorization: `Nostr ${Buffer.from(JSON.stringify(authorization)).toString('base64url')}`,
-        'Content-Type': 'text/html',
-        'X-SHA-256': foreignHash,
+          'Content-Type': 'text/html',
+          'X-SHA-256': foreignHash,
         },
         body: foreignBytes,
       });

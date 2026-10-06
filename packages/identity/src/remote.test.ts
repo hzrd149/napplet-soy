@@ -11,6 +11,7 @@ import { Accounts, captureAccount, PlaintextVault, type Vault } from './accounts
 import { bunkerCredential, openCredential, pairCredential, websiteKinds } from './signer';
 import { BrowserIdentity } from '../../../apps/web/src/lib/browser-identity';
 import { SessionAccount, sessionMaterial } from '../../../apps/web/src/lib/session-account';
+import { browserConnectionName } from '../../../apps/web/src/lib/connection-name';
 
 async function environment() {
   const directory = await mkdtemp(join(tmpdir(), 'napplet-remote-'));
@@ -97,6 +98,72 @@ async function environment() {
     },
   };
 }
+test('browser pairing and bunker connect carry device labels; reconnect keeps the public connection suffix', async () => {
+  const e = await environment();
+  const desktop = new BrowserIdentity('local', undefined, (key) =>
+    browserConnectionName(key, { userAgent: 'Firefox/143.0' }),
+  );
+  const mobile = new BrowserIdentity('local', undefined, (key) =>
+    browserConnectionName(key, { userAgent: 'iPhone Mobile Safari/604.1' }),
+  );
+  try {
+    const uris: string[] = [];
+    for (const identity of [desktop, mobile]) {
+      await e.provider.stop();
+      e.provider.bunkerSecret = undefined;
+      await e.provider.start();
+      await identity.pair([e.url], async (uri) => {
+        uris.push(uri);
+        await e.provider.handleNostrConnectURI(uri);
+      });
+    }
+    const names = uris.map((uri) => new URL(uri).searchParams.get('name'));
+    expect(names[0]).toMatch(/^napplet\.soy · Firefox · Desktop · [a-f0-9]{8}$/);
+    expect(names[1]).toMatch(/^napplet\.soy · Safari · Mobile · [a-f0-9]{8}$/);
+    expect(names[0]).not.toBe(names[1]);
+    expect(names[0]).toContain(new URL(uris[0]).hostname.slice(0, 8));
+    // This provider fixture serves one client at a time; select the desktop session.
+    await e.provider.stop();
+    e.provider.client = new URL(uris[0]).hostname;
+    await e.provider.start();
+    const saved = desktop.accounts.active!.id;
+    await desktop.useSession(saved);
+    const target = await e.transport.getPublicKey();
+    const connects = async () => {
+      const requests = [];
+      for (const event of e.events.filter((e) =>
+        e.tags.some((t) => t[0] === 'p' && t[1] === target),
+      )) {
+        const request = JSON.parse(await e.transport.nip44!.decrypt(event.pubkey, event.content));
+        if (request.method === 'connect') requests.push({ event, request });
+      }
+      return requests;
+    };
+    const reopened = (await connects()).at(-1)!;
+    expect(JSON.parse(reopened.request.params[3])).toEqual({
+      name: names[0],
+      url: 'https://napplet.soy',
+    });
+    expect(reopened.event.pubkey).toBe(new URL(uris[0]).hostname);
+    await e.provider.stop();
+    await e.provider.start();
+    await desktop.bunker(await e.provider.getBunkerURI());
+    const pasted = (await connects()).at(-1)!;
+    expect(JSON.parse(pasted.request.params[3]).name).toBe(
+      browserConnectionName(pasted.event.pubkey, { userAgent: 'Firefox/143.0' }),
+    );
+    expect(pasted.request.params[2]).toContain('sign_event:7');
+    expect(pasted.event.content).not.toContain('Firefox');
+    const creator = await e.creator.getPublicKey();
+    expect(
+      (await desktop.sign(creator, { kind: 7, created_at: 1, tags: [], content: '+' })).pubkey,
+    ).toBe(creator);
+  } finally {
+    await desktop.disconnect();
+    await mobile.disconnect();
+    await e.close();
+  }
+}, 15000);
 test('a captured remote account still signs remotely after another process selects a local key', async () => {
   const e = await environment();
   try {

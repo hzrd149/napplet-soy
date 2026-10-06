@@ -110,6 +110,7 @@ test('production SSR, signed named routes and social actions work through a real
       await headerActions.getByRole('button', { name: `Share ${fixture.title}` }).isEnabled(),
     ).toBe(true);
     await page.getByRole('button', { name: 'Connect to comment or like' }).click();
+    await page.getByRole('button', { name: 'Extension', exact: true }).click();
     await page.getByRole('button', { name: 'Connect browser extension', exact: true }).click();
     await page.getByRole('button', { name: 'Named link', exact: true }).click();
     await page.getByLabel('Creator handle').fill('browser-author');

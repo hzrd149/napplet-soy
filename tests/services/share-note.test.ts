@@ -188,6 +188,7 @@ test('share notes work from gallery and detail with editable parts, exact-event 
     expect(original).toContain('#nappletsoy #game #racing');
     expect(attempts).toHaveLength(0);
     await page.getByRole('button', { name: 'Sign in to post', exact: true }).click();
+    await page.getByRole('button', { name: 'Extension', exact: true }).click();
     await page.getByRole('button', { name: 'Connect browser extension', exact: true }).click();
     await openShare(entries[0].title);
     expect(await textarea.inputValue()).toBe(original);

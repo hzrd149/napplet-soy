@@ -1,4 +1,4 @@
-import { readSocial, publishSocial } from '@/lib/protocol-social';
+import { readSocial, publishSocial, socialSnapshot } from '@/lib/protocol-social';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Heart, MessageCircle, Reply, Trash2, RefreshCw, Zap } from 'lucide-react';
 import { Button } from './ui/button';
@@ -11,6 +11,7 @@ import { ZapButton } from './zap-button';
 import { CardShare } from './card-share';
 import { shareMedia } from '../../../../packages/client/src/share-note';
 import { manifestTopics } from '../../../../packages/protocol/src/topics';
+import { manifestDescription } from '../../../../packages/protocol/src/manifest';
 import type { PublicNapplet } from '../../../../packages/backend/src/public-model';
 import { jsonResponse, signForAccount, type Template } from '@/lib/community-client';
 import {
@@ -24,6 +25,8 @@ import {
 } from '../../../../packages/protocol/src/social';
 import type { SignedEvent } from '../../../../packages/protocol/src';
 import { resolveZapEndpoint, zapTotals } from '../../../../packages/client/src/zaps';
+import { protocolClient } from '@/lib/network';
+import { readLikeState } from '../../../../packages/client/src/social';
 import { useZapTotals, zapTotalsStore } from '@/lib/zap-totals';
 type Comment = SignedEvent & {
   deleted: boolean;
@@ -64,7 +67,8 @@ export function NappletSocial({
 }) {
   const hash = useLocation({ select: (location) => location.hash });
   const { pubkey, connect, ready } = useNostr();
-  const nappletZaps = useZapTotals(socialScope(manifest).key);
+  const scopeKey = socialScope(manifest).key;
+  const nappletZaps = useZapTotals(scopeKey);
   const currentKey = useRef(pubkey);
   currentKey.current = pubkey;
   const [data, setData] = useState<SocialData | null>(null),
@@ -79,11 +83,19 @@ export function NappletSocial({
   const [refreshing, setRefreshing] = useState(true);
   const [refreshError, setRefreshError] = useState('');
   const busyRef = useRef(false);
+  const activeRefresh = useRef<AbortController | null>(null);
+  const generation = useRef(0);
   const refresh = async (signal?: AbortSignal) => {
+    activeRefresh.current?.abort();
+    const controller = new AbortController();
+    activeRefresh.current = controller;
+    signal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
     setRefreshing(true);
     setRefreshError('');
     try {
-      const value = await readSocial(manifest, relays, signal);
+      const value = await readSocial(manifest, relays, signal, (value) => {
+        if (!signal?.aborted) setData(value);
+      });
       if (!signal?.aborted) setData(value);
       if (!signal?.aborted) {
         const targets = [manifest, ...value.comments.filter((c) => !c.deleted)];
@@ -105,7 +117,10 @@ export function NappletSocial({
             }
             try {
               if (!endpoints.has(target.pubkey))
-                endpoints.set(target.pubkey, resolveZapEndpoint(target.pubkey, value.events));
+                endpoints.set(
+                  target.pubkey,
+                  resolveZapEndpoint(target.pubkey, value.events, undefined, signal),
+                );
               const totals = await zapTotals(
                 { ...value, scope: targetScope, manifest: target },
                 { ...value, events },
@@ -127,6 +142,10 @@ export function NappletSocial({
   };
   useEffect(() => {
     const controller = new AbortController();
+    generation.current++;
+    busyRef.current = false;
+    setBusy(false);
+    setPhase('');
     setData(null);
     setPending(null);
     setParent(null);
@@ -135,19 +154,29 @@ export function NappletSocial({
     setAction('');
     setSuccess('');
     void refresh(controller.signal);
-    return () => controller.abort();
-  }, [reference]);
+    return () => {
+      generation.current++;
+      controller.abort();
+      activeRefresh.current?.abort();
+    };
+    // Display references can acquire new relay hints without changing signed identity.
+  }, [scopeKey, manifest.id]);
   useEffect(() => {
-    if (hash !== 'comments' || !data) return;
+    if (hash !== 'comments') return;
     const target = document.getElementById(pubkey ? 'napplet-comment' : 'comment-connect');
     target?.focus({ preventScroll: true });
     target?.scrollIntoView({ block: 'center', behavior: 'instant' });
-  }, [hash, !!data, pubkey]);
-  const deliver = async (event: SignedEvent) => {
+  }, [hash, pubkey]);
+  const deliver = async (event: SignedEvent, turn: number) => {
+    if (turn !== generation.current) return;
     if (currentKey.current !== event.pubkey)
       throw new Error('Connect the signing account again before sending.');
     setPhase('Publishing…');
     await publishSocial(event, relays);
+    if (turn !== generation.current) return;
+    const snapshot = await socialSnapshot(manifest, relays);
+    if (turn !== generation.current) return;
+    setData(snapshot);
     setPending(null);
     if (event.kind === 1111) {
       setContent('');
@@ -155,35 +184,51 @@ export function NappletSocial({
       setSuccess('Posted');
     }
     // A failed read after acknowledgement must never offer to publish again.
-    await refresh();
+    void refresh();
   };
-  const write = async (template: Template, id: string) => {
+  const write = async (input: Template | (() => Promise<Template>), id: string) => {
     if (!pubkey || busyRef.current || (pending && action !== id)) return;
+    const turn = generation.current;
     busyRef.current = true;
     setAction(id);
     setBusy(true);
     setMessage('');
     setSuccess('');
     try {
-      if (pending) await deliver(pending);
+      if (pending) await deliver(pending, turn);
       else {
+        setPhase('Preparing…');
+        const template = typeof input === 'function' ? await input() : input;
+        if (turn !== generation.current) return;
+        if (currentKey.current !== pubkey) throw new Error('Your connected account changed.');
         setPhase('Signing…');
         const event = await signForAccount(pubkey, {
           ...template,
           created_at: Math.max(template.created_at, (data?.lastActions[pubkey] ?? 0) + 1),
         });
+        if (turn !== generation.current) return;
         if (currentKey.current !== pubkey) throw new Error('Your connected account changed.');
         setPending(event);
-        await deliver(event);
+        await deliver(event, turn);
       }
     } catch (error) {
-      setMessage((error as Error).message);
+      if (turn === generation.current) setMessage((error as Error).message);
     } finally {
-      busyRef.current = false;
-      setBusy(false);
-      setPhase('');
+      if (turn === generation.current) {
+        busyRef.current = false;
+        setBusy(false);
+        setPhase('');
+      }
     }
   };
+  const toggleLike = () =>
+    write(async () => {
+      const state = await readLikeState(protocolClient(), manifest, pubkey!, relays);
+      const own = state.likes.filter((e) => e.pubkey === pubkey);
+      const template = own.length ? deletionTemplate(own) : likeTemplate(state.scope, manifest);
+      template.created_at = Math.max(template.created_at, state.lastAction + 1);
+      return template;
+    }, 'napplet-like');
   const control = (id: string, retryLabel: string) => ({
     working: action === id && busy ? phase : undefined,
     error: action === id ? message : undefined,
@@ -221,15 +266,7 @@ export function NappletSocial({
         }
         aria-pressed={!!ownLikes.length}
         disabled={!data || control('napplet-like', '').disabled}
-        onClick={() => {
-          if (data)
-            void write(
-              ownLikes.length
-                ? deletionTemplate(ownLikes)
-                : likeTemplate(data.scope, data.manifest),
-              'napplet-like',
-            );
-        }}
+        onClick={() => void toggleLike()}
       >
         {data?.likeCount.toLocaleString() ?? '—'}
       </ActionButton>
@@ -238,7 +275,7 @@ export function NappletSocial({
         path={reference.startsWith('naddr1') ? `/n/${reference}` : `/r/${reference}`}
         note={() => ({
           title,
-          description: presentation?.description ?? manifest.tags.find((tag) => tag[0] === 'description')?.[1] ?? '',
+          description: presentation?.description ?? manifestDescription(manifest),
           topics: manifestTopics(manifest),
           media: shareMedia({ ...presentation, manifest }),
         })}
@@ -297,14 +334,7 @@ export function NappletSocial({
               icon={<Heart size={16} fill={ownLikes.length ? 'currentColor' : 'none'} />}
               variant={ownLikes.length ? 'default' : 'outline'}
               aria-pressed={!!ownLikes.length}
-              onClick={() =>
-                write(
-                  ownLikes.length
-                    ? deletionTemplate(ownLikes)
-                    : likeTemplate(data.scope, data.manifest),
-                  'napplet-like',
-                )
-              }
+              onClick={() => void toggleLike()}
             >
               {data.likeCount} {data.likeCount === 1 ? 'like' : 'likes'}
             </ActionButton>
@@ -315,82 +345,92 @@ export function NappletSocial({
               {data.comments.filter((e) => !e.deleted).length === 1 ? 'comment' : 'comments'}
             </span>
           </div>
-          {pubkey ? (
-            <form
-              className="community-form comment-form"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void write(commentTemplate(data.scope, content, parent ?? undefined), 'comment');
-              }}
-            >
-              {parent && (
-                <div className="reply-context">
-                  Replying to {data.profiles[parent.pubkey]?.name ?? short(parent.pubkey)}
-                  <Button
-                    size="xs"
-                    variant="ghost"
-                    type="button"
-                    disabled={busy || !!pending}
-                    onClick={() => setParent(null)}
-                  >
-                    Cancel reply
-                  </Button>
-                </div>
-              )}
-              <label htmlFor="napplet-comment">
-                {parent ? 'Your reply' : 'Leave a little note'}
-                <textarea
-                  id="napplet-comment"
-                  value={content}
-                  onChange={(e) => {
-                    setContent(e.target.value);
-                    if (action === 'comment' && !pending) {
-                      setMessage('');
-                      setSuccess('');
-                    }
-                  }}
-                  maxLength={4000}
-                  placeholder="What did you make of this one?"
-                  required
-                  disabled={!pubkey || busy || !!pending}
-                />
-              </label>
-              <div className="comment-submit">
-                <span className="muted">
-                  Signed by {data.profiles[pubkey]?.name ?? short(pubkey)} · posted publicly on
-                  Nostr
-                </span>
-                <ActionButton
-                  data-tone="mint"
-                  {...control('comment', parent ? 'Retry reply' : 'Retry comment')}
-                  disabled={control('comment', '').disabled || !content.trim()}
-                  success={action === 'comment' ? success : undefined}
-                >
-                  {parent ? 'Post reply' : 'Post comment'}
-                </ActionButton>
-              </div>
-            </form>
-          ) : (
-            <div className="social-connect">
-              <p>Bring your Nostr identity to the conversation.</p>
-              <ActionButton
-                id="comment-connect"
-                error={action === 'connect' ? message : undefined}
-                retryLabel="Retry connection"
-                variant="outline"
-                onClick={() => {
-                  setAction('connect');
-                  setMessage('');
-                  void connect().catch((error) => setMessage(error.message));
-                }}
+        </>
+      )}
+      {pubkey ? (
+        <form
+          className="community-form comment-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void write(
+              commentTemplate(socialScope(manifest), content, parent ?? undefined),
+              'comment',
+            );
+          }}
+        >
+          {parent && (
+            <div className="reply-context">
+              Replying to {data?.profiles[parent.pubkey]?.name ?? short(parent.pubkey)}
+              <Button
+                size="xs"
+                variant="ghost"
+                type="button"
+                disabled={busy || !!pending}
+                onClick={() => setParent(null)}
               >
-                Connect to comment or like
-              </ActionButton>
+                Cancel reply
+              </Button>
             </div>
           )}
+          <label htmlFor="napplet-comment">
+            {parent ? 'Your reply' : 'Leave a little note'}
+            <textarea
+              id="napplet-comment"
+              value={content}
+              onChange={(e) => {
+                setContent(e.target.value);
+                if (action === 'comment' && !pending) {
+                  setMessage('');
+                  setSuccess('');
+                }
+              }}
+              maxLength={4000}
+              placeholder="What did you make of this one?"
+              required
+              disabled={!pubkey || busy || !!pending}
+            />
+          </label>
+          <div className="comment-submit">
+            <span className="muted">
+              Signed by {data?.profiles[pubkey]?.name ?? short(pubkey)} · posted publicly on Nostr
+            </span>
+            <ActionButton
+              data-tone="mint"
+              {...control('comment', parent ? 'Retry reply' : 'Retry comment')}
+              disabled={control('comment', '').disabled || !content.trim()}
+              success={action === 'comment' ? success : undefined}
+            >
+              {parent ? 'Post reply' : 'Post comment'}
+            </ActionButton>
+          </div>
+        </form>
+      ) : (
+        <div className="social-connect">
+          <p>Bring your Nostr identity to the conversation.</p>
+          <ActionButton
+            id="comment-connect"
+            error={action === 'connect' ? message : undefined}
+            retryLabel="Retry connection"
+            variant="outline"
+            onClick={() => {
+              setAction('connect');
+              setMessage('');
+              void connect().catch((error) => setMessage(error.message));
+            }}
+          >
+            Connect to comment or like
+          </ActionButton>
+        </div>
+      )}
+      {data ? (
+        <>
           <div className="comment-list">
             {data.comments.length === 0 ? (
-              <p className="muted">No comments found yet. Be the first to leave one.</p>
+              <p className="muted">
+                {refreshing
+                  ? 'Looking for recent comments…'
+                  : 'No comments found yet. Be the first to leave one.'}
+              </p>
             ) : (
               data.comments.map((comment) => {
                 const repliedTo = comment.parent
@@ -494,6 +534,10 @@ export function NappletSocial({
             elsewhere.
           </p>
         </>
+      ) : (
+        <p className="muted" role="status">
+          Looking for recent comments…
+        </p>
       )}
     </section>
   );

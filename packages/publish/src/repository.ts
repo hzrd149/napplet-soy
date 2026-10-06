@@ -172,26 +172,39 @@ export async function selectRepository(input: {
 }
 
 /** Read the newest signed announcement and state from the repository's own relays. */
-export async function loadRepository(latest: Latest, selected: SelectedRepository, local = false) {
+export async function loadRepository(
+  latest: Latest,
+  selected: SelectedRepository,
+  local = false,
+  discoveryRelays: string[] = [],
+) {
   const failures: Error[] = [];
-  const newest = async (relays: string[], kind: number) => {
+  const newest = async (relays: string[], kind: number): Promise<SignedEvent | null> => {
     let best: SignedEvent | null = null;
-    for (const relay of relays) {
-      try {
-        const event = await latest(relay, selected.pubkey, selected.identifier, kind);
-        if (event && (!best || newer(event, best))) best = event;
-      } catch (cause) {
-        failures.push(
-          new DiagnosticError('RELAY_READ', `Repository relay query failed.`, {
-            target: relay,
-            cause,
-          }),
-        );
-      }
-    }
+    await Promise.all(
+      relays.map(async (relay) => {
+        try {
+          const event = await latest(relay, selected.pubkey, selected.identifier, kind);
+          if (event && (!best || newer(event, best))) best = event;
+        } catch (cause) {
+          failures.push(
+            new DiagnosticError('RELAY_READ', `Repository relay query failed.`, {
+              target: relay,
+              cause,
+            }),
+          );
+        }
+      }),
+    );
     return best;
   };
-  const hints = usable(selected.relays, (r) => relayUrl(r, local)).slice(0, 8);
+  // NIP-19 hints are optional. A bare address is discovered on this publication's
+  // configured relays; an explicit hint never silently selects another service.
+  const hints = [
+    ...new Set(
+      usable(selected.relays.length ? selected.relays : discoveryRelays, (r) => relayUrl(r, local)),
+    ),
+  ].slice(0, 8);
   const unavailable = (message: string, recovery: string) =>
     new RepositoryError(
       'REPOSITORY_UNAVAILABLE',

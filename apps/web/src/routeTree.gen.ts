@@ -23,6 +23,8 @@ import { Route as DotwellKnownNappletDotjsonRouteImport } from './routes/[.]well
 import { Route as ApiAdminRouteImport } from './routes/api.admin'
 import { Route as ApiAdminAccessRouteImport } from './routes/api.admin-access'
 import { Route as ApiHealthRouteImport } from './routes/api.health'
+import { Route as ApiLifecycleHistoryRouteImport } from './routes/api.lifecycle-history'
+import { Route as ApiManifestRouteImport } from './routes/api.manifest'
 import { Route as ApiNamesRouteImport } from './routes/api.names'
 import { Route as ApiProfileOgRouteImport } from './routes/api.profile-og'
 import { Route as ApiPublicationsRouteImport } from './routes/api.publications'
@@ -108,6 +110,16 @@ const ApiHealthRoute = ApiHealthRouteImport.update({
   path: '/api/health',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiLifecycleHistoryRoute = ApiLifecycleHistoryRouteImport.update({
+  id: '/api/lifecycle-history',
+  path: '/api/lifecycle-history',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiManifestRoute = ApiManifestRouteImport.update({
+  id: '/api/manifest',
+  path: '/api/manifest',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiNamesRoute = ApiNamesRouteImport.update({
   id: '/api/names',
   path: '/api/names',
@@ -189,6 +201,8 @@ export interface FileRoutesByFullPath {
   '/api/admin': typeof ApiAdminRoute
   '/api/admin-access': typeof ApiAdminAccessRoute
   '/api/health': typeof ApiHealthRoute
+  '/api/lifecycle-history': typeof ApiLifecycleHistoryRoute
+  '/api/manifest': typeof ApiManifestRoute
   '/api/names': typeof ApiNamesRoute
   '/api/profile-og': typeof ApiProfileOgRoute
   '/api/publications': typeof ApiPublicationsRoute
@@ -218,6 +232,8 @@ export interface FileRoutesByTo {
   '/api/admin': typeof ApiAdminRoute
   '/api/admin-access': typeof ApiAdminAccessRoute
   '/api/health': typeof ApiHealthRoute
+  '/api/lifecycle-history': typeof ApiLifecycleHistoryRoute
+  '/api/manifest': typeof ApiManifestRoute
   '/api/names': typeof ApiNamesRoute
   '/api/profile-og': typeof ApiProfileOgRoute
   '/api/publications': typeof ApiPublicationsRoute
@@ -248,6 +264,8 @@ export interface FileRoutesById {
   '/api/admin': typeof ApiAdminRoute
   '/api/admin-access': typeof ApiAdminAccessRoute
   '/api/health': typeof ApiHealthRoute
+  '/api/lifecycle-history': typeof ApiLifecycleHistoryRoute
+  '/api/manifest': typeof ApiManifestRoute
   '/api/names': typeof ApiNamesRoute
   '/api/profile-og': typeof ApiProfileOgRoute
   '/api/publications': typeof ApiPublicationsRoute
@@ -279,6 +297,8 @@ export interface FileRouteTypes {
     | '/api/admin'
     | '/api/admin-access'
     | '/api/health'
+    | '/api/lifecycle-history'
+    | '/api/manifest'
     | '/api/names'
     | '/api/profile-og'
     | '/api/publications'
@@ -308,6 +328,8 @@ export interface FileRouteTypes {
     | '/api/admin'
     | '/api/admin-access'
     | '/api/health'
+    | '/api/lifecycle-history'
+    | '/api/manifest'
     | '/api/names'
     | '/api/profile-og'
     | '/api/publications'
@@ -337,6 +359,8 @@ export interface FileRouteTypes {
     | '/api/admin'
     | '/api/admin-access'
     | '/api/health'
+    | '/api/lifecycle-history'
+    | '/api/manifest'
     | '/api/names'
     | '/api/profile-og'
     | '/api/publications'
@@ -366,6 +390,8 @@ export interface RootRouteChildren {
   ApiAdminRoute: typeof ApiAdminRoute
   ApiAdminAccessRoute: typeof ApiAdminAccessRoute
   ApiHealthRoute: typeof ApiHealthRoute
+  ApiLifecycleHistoryRoute: typeof ApiLifecycleHistoryRoute
+  ApiManifestRoute: typeof ApiManifestRoute
   ApiNamesRoute: typeof ApiNamesRoute
   ApiProfileOgRoute: typeof ApiProfileOgRoute
   ApiPublicationsRoute: typeof ApiPublicationsRoute
@@ -474,6 +500,20 @@ declare module '@tanstack/react-router' {
       path: '/api/health'
       fullPath: '/api/health'
       preLoaderRoute: typeof ApiHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/lifecycle-history': {
+      id: '/api/lifecycle-history'
+      path: '/api/lifecycle-history'
+      fullPath: '/api/lifecycle-history'
+      preLoaderRoute: typeof ApiLifecycleHistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/manifest': {
+      id: '/api/manifest'
+      path: '/api/manifest'
+      fullPath: '/api/manifest'
+      preLoaderRoute: typeof ApiManifestRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/names': {
@@ -642,6 +682,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminRoute: ApiAdminRoute,
   ApiAdminAccessRoute: ApiAdminAccessRoute,
   ApiHealthRoute: ApiHealthRoute,
+  ApiLifecycleHistoryRoute: ApiLifecycleHistoryRoute,
+  ApiManifestRoute: ApiManifestRoute,
   ApiNamesRoute: ApiNamesRoute,
   ApiProfileOgRoute: ApiProfileOgRoute,
   ApiPublicationsRoute: ApiPublicationsRoute,

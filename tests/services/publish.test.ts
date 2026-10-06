@@ -1,3 +1,4 @@
+import { nip19 } from 'nostr-tools';
 import { stack } from './publish-stack';
 import { cliTestVault } from './cli-test-vault';
 import { expect, test } from 'bun:test';
@@ -479,6 +480,13 @@ test('collaboration: two creators publish, propose, review the exact Git tip, me
     const descriptor = await fetch(tag(found.revision, 'soy-preview')!).then((r) => r.bytes());
     const preview = await validatePreview(descriptor, found.revision);
     expect(preview.commit).toBe(found.head!);
+    expect(preview.manifest.content.trim()).not.toBe('');
+    expect(preview.manifest.tags.filter((t) => t[0] === 'x')).toEqual([
+      ['x', preview.artifactHash],
+    ]);
+    expect(
+      preview.manifest.tags.some((t) => ['path', 'requires', 'description', 'd'].includes(t[0])),
+    ).toBe(false);
     // An independent Git client retrieves the proposal's exact c tag and contributor ancestry.
     const observer = join(services.directory, 'observer');
     await sourceGit(services.directory, ['clone', found.clones[0], observer]);
@@ -854,12 +862,17 @@ test('a project with its own NIP-34 remote releases against it; soyLI signs and 
       local: true,
       publication: own,
     });
-    await sourceGit(project, ['remote', 'add', 'origin', urls.portable]);
+    await sourceGit(project, [
+      'remote',
+      'add',
+      'origin',
+      `nostr://${nip19.npubEncode(creator.pubkey)}/my-project`,
+    ]);
     const options = {
       directory: project,
       network: 'local' as const,
       accounts,
-      targets: services.targets,
+      targets: { ...services.targets, mirrors: [...services.targets.mirrors, urls.relay] },
       check: checkPublication,
     };
     const result = await publishCommitted(options);

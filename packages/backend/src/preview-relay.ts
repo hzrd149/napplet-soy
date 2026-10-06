@@ -41,6 +41,16 @@ export class PreviewWebSocket extends NodeWebSocket {
       maxPayload: 65536,
       perMessageDeflate: false,
       followRedirects: false,
+      finishRequest(request) {
+        // Bun can deliver a queued timeout after a request error. ws clears
+        // its request reference on error, so its timeout handler would then
+        // throw outside the relay observable and terminate the web process.
+        request.once('error', () => {
+          request.setTimeout(0);
+          request.removeAllListeners('timeout');
+        });
+        request.end();
+      },
     });
   }
 }

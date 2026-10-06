@@ -9,6 +9,8 @@ import { remixLineage } from '../../protocol/src/remix';
 import { createRemix, loadRemix } from './index';
 import { sourceArchive } from './archive';
 import { freezeFixture as freezeSource } from '../../publish/src/testing';
+import { projectSchema } from '../../publish/src/config';
+import { validateManifest } from '../../protocol/src/manifest';
 
 test('remix downloads exact signed archive and makes a fresh project with source and credit intact', async () => {
   const root = await mkdtemp(join(tmpdir(), 'napplet-remix-'));
@@ -128,6 +130,101 @@ test('invalid remix references report an actionable error without reflecting pas
       message:
         'Use a plain napplet /n/naddr or /r/event link, naddr, nevent, note or hexadecimal event ID.',
     });
+  }
+});
+
+test('standalone snapshot remixes preserve the exact source event without claiming its parent address', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'napplet-standalone-remix-'));
+  const artifact = new TextEncoder().encode('<!doctype html><p>Independent snapshot</p>');
+  const hash = await sha256(artifact),
+    signer = new PrivateKeySigner();
+  const parent = `35129:${await signer.getPublicKey()}:parent`;
+  try {
+    for (const [index, lineage] of [
+      [],
+      [['a', parent]],
+      [
+        ['a', parent],
+        ['A', parent],
+      ],
+    ].entries()) {
+      const manifest = await signer.signEvent({
+        kind: 5129,
+        created_at: index + 1,
+        content: 'Standalone snapshot remix source',
+        tags: [['x', hash], ...lineage],
+      });
+      const result = await createRemix(root, `snapshot-${index}`, {
+        manifest,
+        artifact,
+        files: undefined,
+      });
+      expect(result.lineage.revision).toBe(manifest.id);
+      expect(result.lineage.parent).toBeUndefined();
+      expect(result.lineage.origin).toBe(index === 2 ? parent : undefined);
+      const project = await Bun.file(join(result.directory, 'napplet.json')).json();
+      expect(project.remix.revision).toBe(manifest.id);
+      expect(project.remix.parent).toBeUndefined();
+      expect(await Bun.file(join(result.directory, 'README.md')).text()).toContain(
+        `Original napplet: ${manifest.id}`,
+      );
+      expect(await Bun.file(join(result.directory, 'index.html')).bytes()).toEqual(artifact);
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('third-party optional metadata outside local authoring bounds does not break artifact-only remixes', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'napplet-remote-metadata-'));
+  const artifact = new TextEncoder().encode('<!doctype html><p>Original application</p>');
+  const manifest = await new PrivateKeySigner().signEvent({
+    kind: 35129,
+    created_at: 1,
+    content: 'Useful description. '.repeat(60),
+    tags: [
+      ['d', 'third-party'],
+      ['x', await sha256(artifact)],
+      ['R', 'storage'],
+      ...Array.from({ length: 33 }, (_, i) => ['O', `optional-${i}`]),
+      ['z', 'collaborative editor'],
+      ['z', 'x'.repeat(81)],
+      ['z', 'editor'],
+      ...Array.from({ length: 33 }, (_, i) => ['z', `label-${i}`]),
+      ['i', 'napplet:track/edit', 'track', 'mode'],
+      ['i', 'napplet:track/custom', '$remote'],
+      ['i', `napplet:${'x'.repeat(260)}`],
+      ['i', 'napplet:track/large', ...Array.from({ length: 14 }, (_, i) => `param${i}`)],
+      ['i', 'napplet:track/large', 'more'],
+    ],
+  });
+  const original = JSON.stringify(manifest);
+  try {
+    const accepted = await validateManifest(manifest);
+    expect(accepted.intents.find((i) => i.intent.endsWith('/large'))?.parameters).toHaveLength(15);
+    const result = await createRemix(root, 'independent-remix', {
+      manifest,
+      artifact,
+      files: new Map(),
+    });
+    const config = projectSchema.parse(
+      await Bun.file(join(result.directory, 'napplet.json')).json(),
+    );
+    expect(config.description).toBe(manifest.content.slice(0, 1000));
+    expect(config.requires).toEqual(['storage']);
+    expect(config.optionalDomains).toHaveLength(32);
+    expect(config.archetypes).toHaveLength(32);
+    expect(config.archetypes).toContain('editor');
+    expect(config.archetypes).not.toContain('collaborative editor');
+    expect(config.intents).toEqual([
+      { intent: 'napplet:track/edit', parameters: ['track', 'mode'] },
+    ]);
+    expect(config.remix?.revision).toBe(manifest.id);
+    expect(config.remix?.parent).toBe(`35129:${manifest.pubkey}:third-party`);
+    expect(await Bun.file(join(result.directory, 'index.html')).bytes()).toEqual(artifact);
+    expect(JSON.stringify(manifest)).toBe(original);
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
 

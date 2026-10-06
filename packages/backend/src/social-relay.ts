@@ -28,7 +28,7 @@ function safeRelays(values: string[]) {
         return false;
       }
     })
-    .slice(0, 6);
+    .slice(0, 8);
 }
 function poolFor(relays: string[]) {
   // Local addresses come only from the operator's explicit configuration.

@@ -1,3 +1,4 @@
+import { publicNapplet } from './public-model';
 import { afterEach, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -143,6 +144,94 @@ test('replacement, deterministic timestamp ties, and invalid updates cannot revi
   w.store.admit(fixed);
   expect(w.store.row(manifestKey(fixed))!.id).toBe([tie.id, fixed.id].sort()[0]);
   expect(() => w.store.admit({ ...fixed, sig: '0'.repeat(128) })).toThrow();
+});
+test('signed named revisions retain exact pinned playback after replacement and honor deletion', async () => {
+  let w = await setup();
+  const r = await release();
+  const first = finalizeEvent(
+    {
+      kind: 35129,
+      created_at: r.current.created_at - 2,
+      content: 'First standalone release',
+      tags: [
+        ['d', 'index-test'],
+        ['x', r.hash],
+        ['title', 'First version'],
+      ],
+    },
+    r.secret,
+  );
+  const nextBytes = new TextEncoder().encode(
+    '<!doctype html><title>Second version</title><p>new</p>',
+  );
+  const nextHash = await sha256(nextBytes);
+  const second = finalizeEvent(
+    {
+      ...first,
+      created_at: first.created_at + 1,
+      tags: [
+        ['d', 'index-test'],
+        ['x', nextHash],
+        ['title', 'Second version'],
+      ],
+    },
+    r.secret,
+  );
+  w.store.admit(first);
+  await hydrate(w, r.bytes);
+  w.store.admit(second);
+  await hydrate(w, nextBytes);
+  expect(w.store.rows().map((row) => row.id)).toEqual([second.id]);
+  expect((await indexedLookup({ type: 'snapshot', id: first.id })).entry?.title).toBe(
+    'First version',
+  );
+  expect(await (await indexedArtifact(r.hash))?.bytes()).toEqual(r.bytes);
+  expect((await communityEntries()).map((entry) => entry.revisionId)).toEqual([second.id]);
+  const config = w.config;
+  w.close();
+  worker = undefined;
+  worker = w = new IndexWorker(config);
+  expect((await indexedLookup({ type: 'snapshot', id: first.id })).entry?.availability).toBe(
+    'ready',
+  );
+  // A late older revision can be retained without becoming the current version.
+  const older = finalizeEvent(
+    { ...first, created_at: first.created_at - 1, content: 'Older' },
+    r.secret,
+  );
+  expect(w.store.admit(older)).toBe(true);
+  expect(w.store.row(manifestKey(first))?.id).toBe(second.id);
+  await hydrate(w, r.bytes);
+  expect((await indexedLookup({ type: 'snapshot', id: older.id })).entry?.availability).toBe(
+    'ready',
+  );
+  w.store.admit(
+    finalizeEvent(
+      { kind: 5, created_at: second.created_at, tags: [['e', first.id]], content: '' },
+      generateSecretKey(),
+    ),
+  );
+  expect((await indexedLookup({ type: 'snapshot', id: first.id })).entry).not.toBeNull();
+  w.store.admit(
+    finalizeEvent(
+      { kind: 5, created_at: second.created_at, tags: [['a', manifestKey(first)]], content: '' },
+      r.secret,
+    ),
+  );
+  expect(await indexedLookup({ type: 'snapshot', id: first.id })).toEqual({
+    known: true,
+    entry: null,
+  });
+  expect(await indexedLookup({ type: 'snapshot', id: older.id })).toEqual({
+    known: true,
+    entry: null,
+  });
+  expect(await indexedArtifact(r.hash)).toBeNull();
+  expect(w.store.references().some((reference) => reference.hash === r.hash)).toBe(false);
+  // An in-flight artifact/preview result cannot restore references after deletion.
+  const entry = await indexedProjection({ ...w.store.revision(first.id)!, projection: null }, []);
+  w.store.project(first.id, entry, 0, 0);
+  expect(w.store.revision(first.id)?.projection).toBeNull();
 });
 test('authenticated deletions and expiration survive restart without hiding another author', async () => {
   const w = await setup(),
@@ -360,4 +449,44 @@ test('operator local network exception is explicit and a second writer is reject
       SPACE_INDEX_LOCAL_BLOSSOM: 'http://127.0.0.1:8081',
     }).localBlossom,
   ).toBe('http://127.0.0.1:8081');
+});
+
+test('newest keeps the original publication date; recently updated uses the latest signed release after restart', async () => {
+  const w = await setup(),
+    old = await release(100),
+    brandNew = await release(200);
+  // Existing deployments may only retain the original legacy snapshot.
+  w.store.admit(old.snapshot);
+  await hydrate(w, old.bytes);
+  const update = finalizeEvent({ ...old.current, created_at: 300 }, old.secret);
+  w.store.admit(update);
+  w.store.admit(brandNew.current);
+  await hydrate(w, old.bytes);
+  const newest = await browseGallery({ q: '', tag: '', sort: 'new', unavailable: true });
+  expect(newest.napplets.map((n) => n.revisionId)).toEqual([brandNew.current.id, update.id]);
+  expect(newest.napplets[1].firstPublishedAt).toBe(100);
+  const updated = await browseGallery({ q: '', tag: '', sort: 'updated', unavailable: true });
+  expect(updated.napplets.map((n) => n.revisionId)).toEqual([update.id, brandNew.current.id]);
+  const config = w.config;
+  w.close();
+  worker = undefined;
+  worker = new IndexWorker(config);
+  expect(worker.store.firstPublishedAt(update)).toBe(100);
+  const independent = finalizeEvent(
+    {
+      kind: 5129,
+      created_at: 1,
+      content: 'Independent child',
+      tags: [
+        ['x', old.hash],
+        ['a', `35129:${old.current.pubkey}:${old.identity.identifier}`],
+      ],
+    },
+    old.secret,
+  );
+  worker.store.admit(independent);
+  const entry = await publicNapplet(independent);
+  worker.store.project(independent.id, entry, 0, 0);
+  expect(worker.store.firstPublishedAt(update)).toBe(100);
+  expect(worker.store.firstPublishedAt(independent)).toBe(1);
 });

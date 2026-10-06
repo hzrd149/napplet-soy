@@ -338,3 +338,46 @@ test('comment zaps bind the invoice and receipt to the commenter, independently 
   );
   await expect(requestZapInvoice(context, targets, endpoint, ambiguous)).rejects.toThrow();
 });
+
+test('verified addressed zap receipts survive replacement when the old manifest is pruned', async () => {
+  const { context, endpoint, request } = await fixture();
+  const next = finalizeEvent(
+    { ...context.manifest, created_at: context.manifest.created_at + 1 },
+    author,
+  );
+  const targets = new Map([[next.id, next]]);
+  for (const withKind of [true, false]) {
+    const historical = withKind
+      ? request
+      : finalizeEvent({ ...request, tags: request.tags.filter((t) => t[0] !== 'k') }, alice);
+    const description = JSON.stringify(historical);
+    const receipt = finalizeEvent(
+      {
+        kind: 9735,
+        created_at: now,
+        content: '',
+        tags: [
+          ...historical.tags.filter((t) => ['p', 'e', 'a'].includes(t[0])),
+          ['description', description],
+          ['bolt11', invoice(21000, description)],
+          ['preimage', '07'.repeat(32)],
+        ],
+      },
+      provider,
+    );
+    expect((await verifiedZapReceipt(receipt, socialScope(next), targets, endpoint)).msats).toBe(
+      21000,
+    );
+    const totals = await zapTotals(
+      { ...context, scope: socialScope(next), manifest: next },
+      { events: [receipt], manifests: targets },
+      endpoint,
+    );
+    expect(totals).toMatchObject({ zapCount: 1, msats: 21000 });
+    // The browser reader applies the same target and cryptographic receipt checks.
+    const browser = await import('../../client/src/zaps');
+    expect(
+      (await browser.verifiedZapReceipt(receipt, socialScope(next), targets, endpoint)).msats,
+    ).toBe(21000);
+  }
+});

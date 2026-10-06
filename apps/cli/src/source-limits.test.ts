@@ -69,9 +69,12 @@ test('real CLI accepts 131 tracked files plus a 12 MiB built entry and explains 
     await sourceGit(project, ['add', '.']);
     await sourceGit(project, ['commit', '-m', 'Historical internal file alias']);
     const linked = await dry();
-    expect(linked.code).toBe(1);
-    expect(linked.out).toContain('CLAUDE.md');
-    expect(linked.out).toContain('regular file');
+    expect(linked.code, linked.out + linked.err).toBe(0);
+    const linkedFiles = JSON.parse(linked.out).plan.files;
+    expect(linkedFiles.find((file: { path: string }) => file.path === 'CLAUDE.md')).toEqual({
+      ...linkedFiles.find((file: { path: string }) => file.path === 'index.html'),
+      path: 'CLAUDE.md',
+    });
     await rm(join(project, 'CLAUDE.md'));
     await Bun.write(join(project, 'CLAUDE.md'), 'See index.html.\n');
     await sourceGit(project, ['add', '.']);

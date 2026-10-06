@@ -85,7 +85,7 @@ jobs:
         run: |
           export SPACE_TEST_CLI="$PWD/.local/cli/$VERSION/soyli-$PLATFORM/soyli"
           "$SPACE_TEST_CLI" browser install
-          bun test tests/services/cli-distribution.test.ts tests/services/cli-update.test.ts tests/services/app-data-cli.test.ts apps/cli/src/update.test.ts apps/cli/src/preview-lifecycle.test.ts apps/cli/src/errors.test.ts apps/cli/src/source-limits.test.ts apps/cli/src/managed-data-assets.test.ts
+          bun test tests/services/cli-distribution.test.ts tests/services/cli-update.test.ts tests/services/app-data-cli.test.ts apps/cli/src/update.test.ts apps/cli/src/preview-lifecycle.test.ts apps/cli/src/errors.test.ts apps/cli/src/source-limits.test.ts apps/cli/src/managed-data-assets.test.ts apps/cli/src/migrate.test.ts
           # Browser/bundler suites need fresh Bun processes. Combining the asset
           # bundler and backend initialization reproduces a macOS SIGKILL.
           bun test tests/services/asset-manager.test.ts

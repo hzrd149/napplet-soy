@@ -49,6 +49,19 @@ test('gallery social locks, counts, ranking rails, focused comments and anonymou
     reactions.forEach((event) => events.set(event.id, event));
     store.put(scope.key, [item.current, ...reactions]);
   }
+  // The original release disappears from the relay after an update. Its
+  // addressed likes/comments must still be visible in a fresh browser.
+  const updated = finalizeEvent({ ...fixture.current, created_at: now - 1 }, key);
+  index.admit(updated);
+  index.project(
+    updated.id,
+    { ...(await publicNapplet(updated)), availability: 'ready' },
+    Date.now() + 3600000,
+    Date.now() + 3600000,
+  );
+  events.delete(fixture.current.id);
+  events.delete(fixture.snapshot.id);
+  events.set(updated.id, updated);
   store.close();
   index.close();
   let rejected = 0;
@@ -168,6 +181,23 @@ test('gallery social locks, counts, ranking rails, focused comments and anonymou
     await page.getByRole('heading', { name: 'Most liked', exact: true }).waitFor();
     await page.getByRole('heading', { name: 'Most zapped', exact: true }).waitFor();
     await page.getByRole('heading', { name: 'Most commented', exact: true }).waitFor();
+    expect(await page.getByLabel('Sort napplets').locator('option').allTextContents()).toEqual([
+      'Newest',
+      'Recently updated',
+      'Featured',
+    ]);
+    expect(
+      await page.evaluate(() => {
+        const rail = document.querySelector('.social-discovery')!;
+        const tools = document.querySelector('.gallery-tools')!;
+        const grid = document.querySelector('.napplet-grid')!;
+        return (
+          !!(rail.compareDocumentPosition(tools) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+          !!(tools.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING)
+        );
+      }),
+    ).toBe(true);
+
     expect(await page.locator('.social-rail-liked .napplet-card').count()).toBe(6);
     expect(await card.getByRole('button', { name: /^Like .*1 likes/ }).count()).toBe(1);
     expect(await card.getByRole('button', { name: /^Comment on .*1 comments/ }).count()).toBe(1);
@@ -199,6 +229,7 @@ test('gallery social locks, counts, ranking rails, focused comments and anonymou
     expect(wallet.requests[0].pubkey).not.toBe(fixture.pubkey);
     expect(wallet.requests[0].pubkey).not.toBe(wallet.requests[1].pubkey);
     await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    await page.getByRole('button', { name: 'Extension', exact: true }).click();
     await page.getByRole('button', { name: 'Connect browser extension', exact: true }).click();
     await page.getByRole('dialog').waitFor({ state: 'hidden' });
     await page.getByRole('dialog').waitFor({ state: 'hidden' });

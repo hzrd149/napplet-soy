@@ -101,7 +101,7 @@ and 2020-12; the core subset remains the same. Omitted `additionalProperties` ac
 as false; even explicitly permitted extra values are pruned before persistence
 and delivery because the proposal requires dropping undeclared properties.
 
-Settings use a host-owned key containing verified creator/address/aggregate and
+Settings use a host-owned key containing verified creator/address/build and
 viewer pubkey (or guest). Current and creator-signed pinned links for the same
 build share the verified identity. Different creators, remixes and builds get
 different scopes. Local preview uses its project preview ID and artifact hash.

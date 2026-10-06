@@ -34,15 +34,15 @@ Agents must respect the user's selected account. They must not run account-selec
 
 Local private keys use [Bun's native Secrets API](https://bun.sh/docs/runtime/secrets), through a small `Vault` interface. In the 2026-09-23 source, **new NIP-46 connections default to private session files**, with optional OS-vault storage. Existing remote accounts retain their storage until explicitly migrated. Plain account metadata lives at `${XDG_CONFIG_HOME:-~/.config}/napplet-space/accounts/<network>/accounts.json`. `SPACE_ACCOUNT_HOME` overrides the `napplet-space` directory, but account state and recovery destinations are rejected inside Git trees, including symlinked paths.
 
-| State | Location |
-| --- | --- |
-| Local creator private key | OS credential store, `space.napplet.creator.<network>` service, random credential ID |
-| Portable local private-key backup | `<public-key>.nsec` beside account JSON, mode 0600, outside Git projects |
-| New remote client key, signer pubkey and relay hints | `accounts/<network>/remote-sessions/<account-id>.json`, mode 0600 in a mode-0700 directory; OS vault optional |
-| Existing remote sessions created before this change | Original OS vault until `account storage file` migrates them |
-| Public keys, credential IDs, type, selection, pending status | Account JSON, mode 0600 in a mode-0700 directory |
-| Process ownership | SQLite lock beside the account JSON; automatically released after process exit |
-| Project creator reference | Public key and network only |
+| State                                                        | Location                                                                                                      |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| Local creator private key                                    | OS credential store, `space.napplet.creator.<network>` service, random credential ID                          |
+| Portable local private-key backup                            | `<public-key>.nsec` beside account JSON, mode 0600, outside Git projects                                      |
+| New remote client key, signer pubkey and relay hints         | `accounts/<network>/remote-sessions/<account-id>.json`, mode 0600 in a mode-0700 directory; OS vault optional |
+| Existing remote sessions created before this change          | Original OS vault until `account storage file` migrates them                                                  |
+| Public keys, credential IDs, type, selection, pending status | Account JSON, mode 0600 in a mode-0700 directory                                                              |
+| Process ownership                                            | SQLite lock beside the account JSON; automatically released after process exit                                |
+| Project creator reference                                    | Public key and network only                                                                                   |
 
 Missing, locked or unavailable native storage produces an actionable error. There is no automatic fallback. Linux needs a running, unlocked Secret Service such as GNOME Keyring or KWallet for local private keys and remote sessions explicitly stored there. Remote file sessions need no desktop keyring. The explicit development option below uses a separate plaintext vault for local keys. The VPS services have separate service identities and do not need a creator account. Native macOS behavior is tested; Linux and Windows credential stores are not yet validated here.
 
@@ -162,7 +162,6 @@ button and open that same popup. It fits the viewport and scrolls internally on 
 Form semantics remain a labeled dialog for assistive technology rather than a menu
 of commands; the presentation is an anchored popup. Session and key handling are unchanged.
 
-
 The shell and social prompts open the same account chooser. Choose a NIP-07
 extension, a NIP-46 remote signer, or a private-key flow. After a method is selected,
 the chooser hides its general guidance and shows only the controls needed for that
@@ -179,6 +178,26 @@ the draft. The bounded `websiteKinds` scope in `packages/identity/src/signer.ts`
 also covers supported COMMON/LISTS, app-data and lifecycle actions; creator
 publishing retains its separate scope. NIP-46 auth challenges are
 shown as validated links in the chooser, including during later signing requests.
+
+**Browser connection labels — 2026-10-05 source, not yet deployed:** New remote
+connections identify the browser and device format, for example
+`napplet.soy · Firefox · Desktop · 7c91ab42` or
+`napplet.soy · Safari · Mobile · a830cd19`. Tablet detection includes iPads using
+the desktop Safari user agent. A generic label is used when the browser does not
+identify itself. No raw user-agent string, screen dimensions or private key is
+included. The suffix comes from that connection's **public client key**, so
+independent connections differ and reconnecting the saved credential keeps its
+suffix. A new pairing generates a new client key as before.
+
+The label travels in the QR/link `name` field and in the fourth, JSON metadata
+parameter of a pasted bunker connection's encrypted `connect` request, as described
+by [NIP-46 client metadata](https://github.com/nostr-protocol/nips/blob/master/46.md#client-metadata).
+Our pinned Applesauce signer lacks that fourth-parameter API; a small adapter uses
+its encrypted request transport, response registry and cancellation handling.
+These are display hints: remote signers may ignore them. Authorization still uses
+the full client key and approved permissions; names do not identify or transfer
+an account. Existing signer-side labels change only if that signer accepts updated
+metadata on reconnect.
 
 The original release was memory-only. **The 2026-09-15 deployed revision adds
 remembered accounts using `applesauce-accounts@6.2.0`.** The

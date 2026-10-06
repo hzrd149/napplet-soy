@@ -1,5 +1,9 @@
 # Compatibility evidence and remaining audit
 
+## NIP-5D PR 7 migration — 2026-10-04
+
+soyLI 0.24.0 publications target `4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51`; old `24711d9` manifests remain readable/playable by the deployed dual reader. See [the migration matrix and rollout](NIP5D-MIGRATION.md) and [release evidence](CLI-RELEASES.md). The manifest publisher/parser changes while NAP runtime and upstream package pins stay unchanged. Existing upstream Paja acceptance is evidence for the legacy format only, not a claim that that client supports PR 7.
+
 Updated **2026-09-23**. This records the current implementation and
 evidence, not a declaration that every NAP is fully implemented. Configuration is
 verified in source/local production builds and public browser checks. CLI 0.5.0
@@ -92,16 +96,16 @@ The NIP-5D, runtime and creator pins below are unchanged. Host kind-0 edits and
 genealogy add no required manifest metadata, guest signing permissions or new NAPs.
 See [profiles](PROFILES.md) and [ancestry semantics](REMIXING.md#genealogy-on-napplet-pages).
 
-| Contract/tool | Selected baseline |
-| --- | --- |
-| NIP-5D | [PR 2303, 24711d9c47bbdd07908bf1d52bf677d9cbc530f0](https://github.com/dskvr/nips/blob/24711d9c47bbdd07908bf1d52bf677d9cbc530f0/5D.md); rechecked current proposal head on 2026-09-14 |
-| Registry concepts | [naps a040914b4bbd3a5cd8a14b0f316a723c968ebfb2](https://github.com/napplet/naps/tree/a040914b4bbd3a5cd8a14b0f316a723c968ebfb2); overview does not override NIP-5D |
-| NAP-CONFIG | [PR 14, 448013e6d8cb8c75dce49576b3e7c0d46d960eac](https://github.com/napplet/naps/blob/448013e6d8cb8c75dce49576b3e7c0d46d960eac/naps/NAP-CONFIG.md) |
-| NAP-MEDIA | [PR 10, 2b2d29e90c30b994bf5035a65b57e5fe7f08a9a2](https://github.com/napplet/naps/blob/2b2d29e90c30b994bf5035a65b57e5fe7f08a9a2/naps/NAP-MEDIA.md); shared audio subset, source verified 2026-09-15, not yet deployed |
-| Host bindings | `@napplet/shim` 0.30.0, `@napplet/nap` and `@napplet/core` 0.32.0; root bun.lock |
-| Maintained starter | [boilerplate cbbebe9bd56271277b054535c0a8d720a588f61d](https://github.com/napplet/boilerplate/tree/cbbebe9bd56271277b054535c0a8d720a588f61d) |
-| Creator tooling | Starter pnpm-lock: SDK 0.24.4 / nap+core 0.28.0, Vite plugin 0.11.2, conformance CLI 0.2.15 / engine 0.13.0, Vite 6.4.3, TypeScript 5.9.3 |
-| Creator instructions | [napplet 976ad0549c38f93d4ed418d3ea59a615a7e5fd7f](https://github.com/napplet/napplet/tree/976ad0549c38f93d4ed418d3ea59a615a7e5fd7f); bundled skill bodies unchanged |
+| Contract/tool        | Selected baseline                                                                                                                                                                                                     |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| NIP-5D writer/reader | [PR 7, 4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51](https://github.com/dskvr/nips/blob/4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51/5D.md); rechecked 2026-10-04; legacy reader `24711d9c47bbdd07908bf1d52bf677d9cbc530f0`   |
+| Registry concepts    | [naps a040914b4bbd3a5cd8a14b0f316a723c968ebfb2](https://github.com/napplet/naps/tree/a040914b4bbd3a5cd8a14b0f316a723c968ebfb2); overview does not override NIP-5D                                                     |
+| NAP-CONFIG           | [PR 14, 448013e6d8cb8c75dce49576b3e7c0d46d960eac](https://github.com/napplet/naps/blob/448013e6d8cb8c75dce49576b3e7c0d46d960eac/naps/NAP-CONFIG.md)                                                                   |
+| NAP-MEDIA            | [PR 10, 2b2d29e90c30b994bf5035a65b57e5fe7f08a9a2](https://github.com/napplet/naps/blob/2b2d29e90c30b994bf5035a65b57e5fe7f08a9a2/naps/NAP-MEDIA.md); shared audio subset, source verified 2026-09-15, not yet deployed |
+| Host bindings        | `@napplet/shim` 0.30.0, `@napplet/nap` and `@napplet/core` 0.32.0; root bun.lock                                                                                                                                      |
+| Maintained starter   | [boilerplate cbbebe9bd56271277b054535c0a8d720a588f61d](https://github.com/napplet/boilerplate/tree/cbbebe9bd56271277b054535c0a8d720a588f61d)                                                                          |
+| Creator tooling      | Starter pnpm-lock: SDK 0.24.4 / nap+core 0.28.0, Vite plugin 0.11.2, conformance CLI 0.2.15 / engine 0.13.0, Vite 6.4.3, TypeScript 5.9.3                                                                             |
+| Creator instructions | [napplet 976ad0549c38f93d4ed418d3ea59a615a7e5fd7f](https://github.com/napplet/napplet/tree/976ad0549c38f93d4ed418d3ea59a615a7e5fd7f); vendored bodies retained; generated protocol guidance adapted                   |
 
 NIP-5D remains authoritative by user decision, including while its PR is open.
 Its named/root/snapshot kinds remain **35129/15129/5129**. The registry overview's
@@ -114,8 +118,8 @@ a bootstrap. Our injected prelude also performs the NAP-SHELL handshake for the
 host's source-bound dispatcher and supports older callers. This is a host adapter,
 not a requirement imposed on a standard published artifact.
 
-Single-file HTML and packaged resource manifests retain the NIP-5A path/aggregate
-hash bindings selected by NIP-5D. Verification precedes CSP/shim injection. Space
+New single-file HTML manifests use raw artifact `x`; legacy manifests and packaged
+resource manifests retain their existing path/aggregate bindings. Verification precedes CSP/shim injection. Space
 preview descriptors, source archive/commit hints and aliases are optional; their
 absence cannot block another publisher's otherwise compatible artifact.
 
@@ -127,21 +131,21 @@ Evidence names are repository tests, not a substitute for an exact-proposal audi
 CONFIG plus the FS/UPLOAD/COMMON/LISTS contracts were reconciled against selected
 proposal revisions; mapping the remaining domains to individual NAP revisions/dependencies is still open before wider launch.
 
-| Domain | Supported surface / explicit policy | Implementation and evidence |
-| --- | --- | --- |
-| `shell` | ready/init once, supports, ready callback, services; empty named-service list | `runtime/prelude.ts`, `host.ts`; runtime browser handshake and unknown-message tests |
-| `identity` | getPublicKey, getRelays (NIP-65), getProfile, getFollows, getMutes, changed push; getList/getZaps/getBlocked/getBadges return unsupported-policy errors | `nostr/playback.ts`, host account scopes; playback unit tests and account-switch browser test |
-| `storage` | get/set/remove/keys; shared and instance SDK scopes; bounded strings/keys; no device/cloud sync | `runtime/storage.ts` and tests; runtime browser persistence/isolation |
-| `theme` | get resolved shell colors; live theme.changed through installed onChanged hook | `runtime/appearance.ts`, `runtime/host.ts`; pinned-shim browser checks cover get/onChanged, unsubscribe and unchanged gameplay/settings; [appearance](APPEARANCE.md) |
-| `resource` | info, bytes, bytesMany, cancel; shim data URL/object URL helpers; HTTPS/Blossom mediation; unsupported schemes and unsafe destinations/formats rejected | `runtime/host.ts`, backend resource responder; resource tests, queued cancellation, public packaged-loader historical check |
-| `relay` | query/subscribe/close on allowed relays; publish limited to scoped public app-data records with viewer consent; publishEncrypted denied | `nostr/playback.ts`; actual WebSocket fixtures, signature/filter/dedup tests; denied publish browser test |
-| `outbox` | getEvent/query/subscribe/close/resolveRelays; bounded NIP-65 planning, incomplete results; publish limited to scoped public app-data records with viewer consent | Same Applesauce implementation; playback tests. No signer is installed in the iframe |
-| `common` | Public NIP-19 helpers including nrelay, profile/follows and approved follow/unfollow/react/report | Shared action session; signed event targets; action/unit and real-shim browser tests |
-| `link` | open an HTTPS link through a host-owned user choice; other schemes/credentials denied | `runtime/host.ts`; CLI browser prompt policy checks |
-| `fs` | Session operations plus file/multiple-file/directory import copies and export picker | Atomic virtual copies only; filesystem/unit and real-shim browser tests |
-| `upload` | info/upload/status, Blossom rail, asynchronous verified URLs and status changes | Connected viewer, approved destination, bounded bytes; no NIP-96/transforms |
-| `lists` | supported/add/remove; public items on 13 advertised list kinds | Opaque encrypted content preserved; no private mutation; strict relay read and conflict checks |
-| `config` | registerSchema/get/subscribe/unsubscribe/openSettings; schema snapshot and schemaError notifications; validated host-owned edits | `runtime/config-*`, shared settings panel; configuration unit/service/browser tests; [precise limits](CONFIGURATION.md) |
+| Domain     | Supported surface / explicit policy                                                                                                                              | Implementation and evidence                                                                                                                                          |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shell`    | ready/init once, supports, ready callback, services; empty named-service list                                                                                    | `runtime/prelude.ts`, `host.ts`; runtime browser handshake and unknown-message tests                                                                                 |
+| `identity` | getPublicKey, getRelays (NIP-65), getProfile, getFollows, getMutes, changed push; getList/getZaps/getBlocked/getBadges return unsupported-policy errors          | `nostr/playback.ts`, host account scopes; playback unit tests and account-switch browser test                                                                        |
+| `storage`  | get/set/remove/keys; shared and instance SDK scopes; bounded strings/keys; no device/cloud sync                                                                  | `runtime/storage.ts` and tests; runtime browser persistence/isolation                                                                                                |
+| `theme`    | get resolved shell colors; live theme.changed through installed onChanged hook                                                                                   | `runtime/appearance.ts`, `runtime/host.ts`; pinned-shim browser checks cover get/onChanged, unsubscribe and unchanged gameplay/settings; [appearance](APPEARANCE.md) |
+| `resource` | info, bytes, bytesMany, cancel; shim data URL/object URL helpers; HTTPS/Blossom mediation; unsupported schemes and unsafe destinations/formats rejected          | `runtime/host.ts`, backend resource responder; resource tests, queued cancellation, public packaged-loader historical check                                          |
+| `relay`    | query/subscribe/close on allowed relays; publish limited to scoped public app-data records with viewer consent; publishEncrypted denied                          | `nostr/playback.ts`; actual WebSocket fixtures, signature/filter/dedup tests; denied publish browser test                                                            |
+| `outbox`   | getEvent/query/subscribe/close/resolveRelays; bounded NIP-65 planning, incomplete results; publish limited to scoped public app-data records with viewer consent | Same Applesauce implementation; playback tests. No signer is installed in the iframe                                                                                 |
+| `common`   | Public NIP-19 helpers including nrelay, profile/follows and approved follow/unfollow/react/report                                                                | Shared action session; signed event targets; action/unit and real-shim browser tests                                                                                 |
+| `link`     | open an HTTPS link through a host-owned user choice; other schemes/credentials denied                                                                            | `runtime/host.ts`; CLI browser prompt policy checks                                                                                                                  |
+| `fs`       | Session operations plus file/multiple-file/directory import copies and export picker                                                                             | Atomic virtual copies only; filesystem/unit and real-shim browser tests                                                                                              |
+| `upload`   | info/upload/status, Blossom rail, asynchronous verified URLs and status changes                                                                                  | Connected viewer, approved destination, bounded bytes; no NIP-96/transforms                                                                                          |
+| `lists`    | supported/add/remove; public items on 13 advertised list kinds                                                                                                   | Opaque encrypted content preserved; no private mutation; strict relay read and conflict checks                                                                       |
+| `config`   | registerSchema/get/subscribe/unsubscribe/openSettings; schema snapshot and schemaError notifications; validated host-owned edits                                 | `runtime/config-*`, shared settings panel; configuration unit/service/browser tests; [precise limits](CONFIGURATION.md)                                              |
 
 MEDIA update, 2026-09-15: the shared source host advertises `media`, using the pinned
 proposal's Wire Protocol spellings (matching shim 0.30.0). Shell-owned HTTPS audio

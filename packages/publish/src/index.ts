@@ -1,3 +1,4 @@
+import { isManifestMigration } from '../../migration/src';
 import { diagnose, redactDiagnostic } from '../../diagnostics/src';
 import { parseAssets, ASSET_LOCK } from '../../assets/src';
 import { inspectPreviewVideo, MAX_VIDEO_BYTES } from '../../protocol/src/preview-video';
@@ -97,7 +98,16 @@ function result(job: PublishJob, unchanged = false) {
     currentId: job.current?.id ?? null,
     // These are portable route candidates until the website has indexed the events.
     url: `${job.plan.targets.site}/n/${naddr}`,
-    snapshotUrl: job.snapshot ? `${job.plan.targets.site}/r/${job.snapshot.id}` : null,
+    // A standalone snapshot carries ancestry, not its own named application identity.
+    // Pin the signed current event to retain named storage/backend identity when sharing.
+    snapshotUrl:
+      job.plan.manifestFormat === 'standalone'
+        ? job.current
+          ? `${job.plan.targets.site}/r/${job.current.id}`
+          : null
+        : job.snapshot
+          ? `${job.plan.targets.site}/r/${job.snapshot.id}`
+          : null,
     websiteReady: job.website?.ready ?? false,
     websiteCheckedAt: job.website?.checkedAt ?? null,
     websiteStatus: job.website?.reason ?? 'pending',
@@ -111,6 +121,13 @@ function result(job: PublishJob, unchanged = false) {
       : null,
     video: job.video
       ? { ...job.video, url: `${job.plan.targets.blossom}/${job.video.hash}` }
+      : null,
+    icon: job.plan.icon
+      ? {
+          hash: job.plan.icon.hash,
+          mime: job.plan.icon.mime,
+          url: `${job.plan.targets.blossom}/${job.plan.icon.hash}`,
+        }
       : null,
     mirrors: job.mirrors,
     mirrorErrors: job.mirrorErrors ?? {},
@@ -150,6 +167,7 @@ async function verifyFrozen(journal: Journal, job: PublishJob) {
     job.plan.targets,
     job.commit,
     job.plan.files.map((f) => f.path),
+    job.plan.manifestFormat ?? 'legacy',
   );
   if (
     inspected.fingerprint !== job.fingerprint ||
@@ -319,7 +337,12 @@ export async function publishProject(options: PublishOptions) {
         JSON.stringify(previousCurrent.tags) === JSON.stringify(remotePrevious.tags)
       );
       const retired = retirement.length > 0;
-      const refreshedInShell = sameListing && remotePrevious?.id !== previousCurrent?.id;
+      const refreshedInShell =
+        (sameListing ||
+          (!!previousCurrent &&
+            !!remotePrevious &&
+            (await isManifestMigration(previousCurrent, remotePrevious)))) &&
+        remotePrevious?.id !== previousCurrent?.id;
       if (options.resume && !job && (retired || refreshedInShell))
         throw new PublishError(
           'PUBLICATION_RETIRED',
@@ -393,7 +416,12 @@ export async function publishProject(options: PublishOptions) {
             );
             progress('check');
             // The creator's own repository is verified, not written: no hosted source events.
-            const linked = selected ? await loadRepository(latest, selected, local) : null;
+            const linked = selected
+              ? await loadRepository(latest, selected, local, [
+                  plan.targets.relay,
+                  ...plan.targets.mirrors,
+                ])
+              : null;
             if (linked)
               await verifyReleaseReachable({
                 directory: root,
@@ -561,6 +589,7 @@ export async function publishProject(options: PublishOptions) {
               receipts: {
                 ...(preview ? { preview: false, descriptor: false } : {}),
                 ...(video ? { video: false } : {}),
+                ...(plan.icon ? { icon: false } : {}),
                 source: false,
                 artifact: false,
                 archive: false,
@@ -661,13 +690,20 @@ export async function publishProject(options: PublishOptions) {
               : signer!,
           });
         if (!completed) await save();
+        // A prepared legacy journal keeps its original wire shape, even if signing was
+        // interrupted. Fresh jobs always use the standalone NIP-5D manifest.
+        const standalone = job.plan.manifestFormat === 'standalone';
         const tags = [
-          ['path', '/index.html', job.plan.artifactHash],
-          [
-            'x',
-            await aggregateHash([{ path: '/index.html', hash: job.plan.artifactHash }]),
-            'aggregate',
-          ],
+          ...(standalone
+            ? [['x', job.plan.artifactHash]]
+            : [
+                ['path', '/index.html', job.plan.artifactHash],
+                [
+                  'x',
+                  await aggregateHash([{ path: '/index.html', hash: job.plan.artifactHash }]),
+                  'aggregate',
+                ],
+              ]),
           ['title', job.plan.title],
           ...(job.preview
             ? [
@@ -680,13 +716,21 @@ export async function publishProject(options: PublishOptions) {
             : []),
           ...(job.plan.remix
             ? [
-                ['A', job.plan.remix.origin],
+                ...(!standalone && job.plan.remix.origin ? [['A', job.plan.remix.origin]] : []),
                 ['remix-version', job.plan.remix.revision],
               ]
             : []),
-          ...(job.plan.description ? [['description', job.plan.description]] : []),
+          ...(!standalone && job.plan.description ? [['description', job.plan.description]] : []),
           ...job.plan.servers.map((s) => ['server', s]),
-          ...job.plan.requires.map((r) => ['requires', r]),
+          ...job.plan.requires.map((r) => [standalone ? 'R' : 'requires', r]),
+          ...(standalone
+            ? [
+                ...(job.plan.optionalDomains ?? []).map((r) => ['O', r]),
+                ...(job.plan.archetypes ?? []).map((a) => ['z', a]),
+                ...(job.plan.intents ?? []).map((i) => ['i', i.intent, ...i.parameters]),
+                ...(job.plan.icon ? [['icon', job.plan.icon.hash, job.plan.icon.mime]] : []),
+              ]
+            : []),
           ...job.plan.topics.map((t) => ['t', t]),
           [
             'source',
@@ -698,6 +742,13 @@ export async function publishProject(options: PublishOptions) {
                 options.network === 'local',
               ).portable,
           ],
+          // A signed, optional cleanup policy protects an existing repository even
+          // when it happens to share the napplet identifier. It never gates playback.
+          ...(job.repository && !job.current && !job.snapshot
+            ? [['soy-source-repository', job.repository.address, 'linked']]
+            : ((job.current ?? job.snapshot)?.tags.filter(
+                (t) => t[0] === 'soy-source-repository',
+              ) ?? [])),
           ['source-commit', job.commit],
           ['source-archive', `${job.plan.targets.blossom}/${job.archiveHash}`],
         ];
@@ -764,17 +815,24 @@ export async function publishProject(options: PublishOptions) {
           {
             kind: 5129,
             created_at: job.createdAt,
-            content: '',
+            content: standalone ? job.plan.description : '',
             tags: [
               ...tags,
-              [
-                'a',
-                identityAddress({
-                  kind: 35129,
-                  pubkey: account.pubkey,
-                  identifier: job.plan.identifier,
-                }),
-              ],
+              ...(standalone
+                ? [
+                    ...(job.plan.remix?.parent ? [['a', job.plan.remix.parent]] : []),
+                    ...(job.plan.remix?.origin ? [['A', job.plan.remix.origin]] : []),
+                  ]
+                : [
+                    [
+                      'a',
+                      identityAddress({
+                        kind: 35129,
+                        pubkey: account.pubkey,
+                        identifier: job.plan.identifier,
+                      }),
+                    ],
+                  ]),
             ],
           },
           job.snapshot,
@@ -784,11 +842,11 @@ export async function publishProject(options: PublishOptions) {
           {
             kind: 35129,
             created_at: job.createdAt,
-            content: '',
+            content: standalone ? job.plan.description : '',
             tags: [
               ...tags,
               ['d', job.plan.identifier],
-              ...(job.plan.remix ? [['a', job.plan.remix.parent]] : []),
+              ...(!standalone && job.plan.remix?.parent ? [['a', job.plan.remix.parent]] : []),
             ],
           },
           job.current,
@@ -831,6 +889,16 @@ export async function publishProject(options: PublishOptions) {
         for (const [kind, bytes, hash, type] of [
           ['artifact', executableBytes(frozen.contents), job.plan.artifactHash, 'text/html'],
           ['archive', frozen.archive, job.archiveHash, 'application/x-tar'],
+          ...(job.plan.icon
+            ? [
+                [
+                  'icon',
+                  frozen.contents.get(job.plan.icon.file)!,
+                  job.plan.icon.hash,
+                  job.plan.icon.mime,
+                ] as const,
+              ]
+            : []),
           ...(job.video && frozen.video
             ? [['video', frozen.video, job.video.hash, 'video/webm'] as const]
             : []),

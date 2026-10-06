@@ -1,7 +1,109 @@
 # soyLI releases and updates
 
 GitHub Releases distribute the standalone CLI independently of the website/VPS.
-The current published version is **0.23.7**.
+The current published version is **0.24.2**.
+
+**0.24.2 published and deployed 2026-10-06 (Europe/Vienna):**
+[GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.24.2),
+source `8f809650b2fe4d1fd4f6bf045159d28868a893ae`.
+[Workflow 37454517650](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37454517650)
+passed the source gate, all four native jobs and publication of all 11 assets.
+
+Fresh projects and remix discovery use seven public relay defaults, including
+five additional relays that supplied the affected creator's verified name and
+avatar during anonymous checks. Failing older defaults have been replaced.
+Existing project destinations, saved browser networks and operator overrides
+remain authoritative; no signer or ContextVM relay settings change.
+See [relay defaults](RELAY-DEFAULTS.md) for the current set and dated evidence.
+
+The shared server retains up to eight configured profile/social destinations.
+A failed relay handshake can no longer terminate the web process when Bun emits
+a queued timeout after the request error. Original failures and handshake
+deadlines remain intact. NIP-22 comment readers accept additional mentioned
+people while still requiring the actual parent author and correct thread.
+These server changes require a website deployment in addition to the CLI release.
+
+After updating soyLI, restart previews. Existing projects can edit their Extra
+relay copies in the local manager; saved publication jobs retain their original
+destinations. Website users with custom networks can choose **Use site defaults**
+after deployment. No republish or napplet migration is needed for profile display.
+
+Local verification passes TypeScript, 552 source tests (4,518 assertions), the
+production build and six profile/proposal/source browser tests (28 assertions).
+Release checksums and an isolated public installation pass; `doctor` reports
+0.24.2 as up to date, and a clean account-free project receives the new relay list.
+
+Website release `20261006111729495-77355` is active. The standard deployment
+passed all 552 source tests on VPS Bun 1.3.8, including the handshake regressions,
+Go race checks, relay/Blossom/GRASP integration, production build and three Linux
+backend isolation/backup/authorization tests. Fresh public desktop and 390px
+browser sessions show the affected creator's name/avatar in both detail and
+account header using the actual site defaults, with no page errors or overflow.
+Root/docs, installer bytes, public services and index health pass. Shared proxy
+checksums are unchanged; the other site returns 200. Persistent state was retained.
+
+**0.24.1 published 2026-10-05 (Europe/Vienna):**
+[GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.24.1),
+source `2a8733af7fe14f6179a6d034db56ece351ac9f2e`.
+[Workflow 37292441710](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37292441710)
+passed the source gate, all four native jobs and release publication.
+
+A migration preview now creates its private plan parent when no account has ever
+been configured. Previously that fresh-install case failed with `ENOENT` before
+planning. The correction generates no key, selects no identity and signs/posts
+nothing; original-author selection and confirmation remain required for publication.
+The real entrypoint regression was red before the correction and passes afterward,
+including the compiled macOS ARM64 binary (31 assertions). TypeScript and all 545
+source tests pass (4,425 assertions). A checksum-verified public installation reports
+0.24.1 as current through `doctor`. With a fresh account directory, it verifies the
+actual public napplet's 1,063,318-byte HTML and prepares its conversion without
+account setup or signing. All other 0.24.0 migration/compatibility behavior remains.
+
+The 0.24.1 website was activated in deployment `20261005095909023-57511`. Its installer and
+all four manual downloads point to 0.24.1. Fresh live desktop/mobile checks pass:
+gallery tools follow social rankings, both chronology options are present, the
+affected updated napplet shows its existing 10,000 sats, and no page errors or
+390px layout overflow occur. Web and persistent index health identify the same
+release. Application, relay, Blossom, GRASP and Linux backend sandbox gates passed
+before activation; persistent service/index data was retained.
+
+**0.24.0 published 2026-10-05 (Europe/Vienna):**
+[GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.24.0),
+source `a85da7dbd3f46f284dd163ba32628e84ddc90996`.
+[Workflow 37289773986](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37289773986)
+passed the source gate, all four native build/installer/updater/fresh-project jobs
+and verified release publication.
+
+Fresh publication uses the standalone NIP-5D manifest at `4d0fb2e`; existing
+publications remain supported by the legacy reader. Required/optional domains,
+icons, archetypes and intent discovery metadata are available in project metadata
+and the manager. The pinned runtime/SDK/plugin remain unchanged. Optional Soy
+source and presentation metadata never become playback requirements.
+
+`soyli migrate <napplet-link> --dry-run --json` verifies exact published HTML and
+previews an explicit metadata-only conversion. Original-author confirmation is
+required; retries reuse a saved signature outside Git. No rebuild, asset upload
+or history rewrite occurs. Named/root identity is retained; immutable snapshots
+remain unchanged. See [the creator guide](NIP5D-CREATOR.md).
+
+Safe current-tree source aliases such as `CLAUDE.md → AGENTS.md` now retain their
+Git links while source archives materialize exact committed contents. Unsafe
+links/private files remain blocked. Source limits remain 1,024 files/40 MiB and
+50 MiB archives; playable HTML remains 25 MiB.
+
+The compatible website reader was deployed before publishing this CLI. Addressed
+likes, comments and verified zaps survive pruned historical revisions. The gallery
+separates Newest from Recently updated and places filters below social rankings.
+NIP-46 browser connection labels distinguish browser, device format and public
+session suffix. Existing projects can run `soyli skills update`; a normal fresh
+publication upgrades their manifest, while frozen legacy jobs preserve their
+original resume contract. Independent clients need their own new-format reader.
+
+Local verification: TypeScript plus 545 source tests (4,421 assertions), real
+relay/Blossom/indexer/production-browser compatibility, compiled CLI migration and
+source alias checks (13 tests, 147 assertions), and live desktop/mobile checks.
+The affected updated napplet again displays its verified 10,000-sat total. No
+public test reaction, comment, invoice request or payment was created.
 
 **0.23.7 published 2026-10-03 (Europe/Vienna):**
 [GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.23.7),
