@@ -1,5 +1,15 @@
 # soyLI error diagnostics
 
+`CONFORMANCE_BROWSER` identifies missing compatible headless Chromium or FFmpeg
+for the project's own Playwright version, including the expected revision and
+executable path. Nix builds report this before running the project conformance
+script or a browser installer, with flake/version/cache recovery options. Regular
+installations still install missing browsers automatically. Browser inspection
+and installation failures retain the tool's cause and exit status. Real compiled
+CLI regressions cover cache reuse, Nix refusal, terminal/JSON recovery, and the
+ordinary installation fallback; the offline NixOS VM also runs upstream
+conformance with real packaged Chromium.
+
 Historical source failures now identify the rejected path, Git blob, containing
 commit and release commit without printing blob contents. `publish --dry-run`
 performs the same history checks before sandbox/network work; these failures are
@@ -135,6 +145,8 @@ local HTTP error responses retain their `error` text and add a `diagnostic` obje
   failures retain sanitized curl/tar output and exit status. Doctor reports an
   unavailable release check alongside local diagnostics. `soyli update --json`
   keeps installer progress on stderr and emits one structured result/error.
+  A package-manager build (`--distribution nix`) refuses with `UPDATE_INSTALLATION`,
+  naming that package manager in the recovery instead of the GitHub installer.
 - **Git:** startup, exit status, bounded stdout/stderr, timeout and output-limit errors.
   Failed source alternatives retain their causes when no source succeeds.
   Proposal inbox confirmation includes failed Git ref pushes, and Git execution
@@ -148,6 +160,9 @@ local HTTP error responses retain their `error` text and add a `diagnostic` obje
 - **Project tools:** setup, build and other wrapped commands retain a sanitized
   output tail. Vite watcher failures include their output and exit status when
   available. Toolchain downloads identify their destination and HTTP failure.
+  A packager-provided toolchain reports `TOOLCHAIN_PROVIDED` for an incomplete or
+  missing `SOYLI_NODE`/`SOYLI_PNPM` pair and `TOOLCHAIN_VERSION` with the Node path
+  when it is not the pinned version.
 - **Relay build/test runner:** Go dependency and build/test failures preserve
   sanitized tool output, operation, exit status, relay directory and recovery
   command. Test failures are no longer mislabeled as missing build prerequisites.

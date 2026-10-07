@@ -33,6 +33,7 @@ import { startPreviewServer } from './preview/server';
 import { localBackend } from './backend';
 import { buildProject, setupProject } from './toolchain';
 import { projectSchema } from '../../../packages/publish/src/config';
+import { hostEnvironment } from './distribution';
 
 export async function proposalList(options: CollaborationOptions & { reference?: string }) {
   const targets = defaultTargets(options.network);
@@ -335,6 +336,7 @@ export async function review(
       );
     if (!options.noOpen && !options.json)
       Bun.spawn([process.platform === 'darwin' ? 'open' : 'xdg-open', url], {
+        env: hostEnvironment(),
         stdout: 'ignore',
         stderr: 'ignore',
       });

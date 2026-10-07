@@ -145,10 +145,24 @@ test('manager saves files and the real sandbox decodes media and data packs thro
     );
     await Bun.write(join(root, 'preview-cover.png'), png);
     await page.getByRole('button', { name: 'Reload from files' }).click();
+    // The file write can finish before the browser receives the refreshed form.
+    // Keep that interval observable so the next edit cannot race the response.
+    await page.route('**/manager', async (route) => {
+      const request = route.request();
+      if (request.method() !== 'POST') return route.continue();
+      const action = request.postDataJSON();
+      if (action.action !== 'select' || action.kind !== 'image') return route.continue();
+      const response = await route.fetch();
+      await Bun.sleep(500);
+      await route.fulfill({ response });
+    });
     await page.getByRole('button', { name: 'Use as cover' }).click();
     await browserExpect
       .poll(async () => (await Bun.file(join(root, 'napplet.json')).json()).preview.image)
       .toBe('preview-cover.png');
+    await browserExpect(
+      page.getByRole('combobox', { name: 'Cover image', exact: true }),
+    ).toHaveValue('preview-cover.png');
     await page.getByLabel('Assets · Blossom', { exact: true }).fill('http://127.0.0.1:9234');
     await page.getByRole('button', { name: 'Save destinations' }).click();
     await browserExpect
