@@ -105,19 +105,23 @@ let
         --ignore-scripts \
         --no-progress
 
-      # Bun 1.3.11 can race when linking this cyclic peer dependency's bin:
-      # https://github.com/oven-sh/bun/issues/30209. Normalize the link so
-      # identical locked dependencies always have the same recursive hash.
-      for dependencyModules in node_modules/.bun/update-browserslist-db@*/node_modules; do
-        if [ -d "$dependencyModules" ]; then
-          if [ ! -f "$dependencyModules/browserslist/cli.js" ]; then
-            echo "soyli: locked browserslist dependency is missing from $dependencyModules" >&2
-            exit 1
-          fi
-          mkdir -p "$dependencyModules/.bin"
-          ln -sfn ../browserslist/cli.js "$dependencyModules/.bin/browserslist"
-        fi
-      done
+      # Bun 1.3.11 races when linking bins between cyclic peer dependencies
+      # (browserslist, webpack, ...): https://github.com/oven-sh/bun/issues/30209.
+      # Which links appear depends on download timing, so identical locked
+      # dependencies hash differently across machines. These store-internal
+      # .bin directories only serve lifecycle scripts, which --ignore-scripts
+      # skips; drop them all. Top-level and workspace .bin links are kept.
+      find node_modules/.bun -mindepth 3 -maxdepth 3 -name .bin -type d -exec rm -rf {} +
+
+      # The playwright-core-mac-compat alias races the real playwright-core for
+      # the store's fallback link. Point it at the version locked by name.
+      playwrightCore=node_modules/.bun/playwright-core@${playwrightVersion}/node_modules/playwright-core
+      if [ ! -f "$playwrightCore/package.json" ]; then
+        echo "soyli: locked playwright-core ${playwrightVersion} is missing from node_modules/.bun" >&2
+        exit 1
+      fi
+      ln -sfn "../playwright-core@${playwrightVersion}/node_modules/playwright-core" \
+        node_modules/.bun/node_modules/playwright-core
 
       runHook postBuild
     '';
@@ -140,7 +144,7 @@ let
     # Fixup can embed host-specific Nix store paths in the fixed-output tree.
     dontFixup = true;
 
-    outputHash = "sha256-HLAdntGlakaSyGXyvXX9mqk3vSHtFxvq2MzMEcpm+OU=";
+    outputHash = "sha256-EjPug6cEhxlMHNieSsWHLrI2N6ye/aGBBkPnqpN3gEg=";
     outputHashAlgo = "sha256";
     outputHashMode = "recursive";
   };

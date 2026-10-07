@@ -79,12 +79,24 @@ The build intentionally fails when nixpkgs drifts from the CLI's pins:
 must equal `@playwright/test`. Update the pins and nixpkgs together.
 
 `soyli-node-modules` is a fixed-output derivation of `bun install` over the
-manifests and `bun.lock`. The pinned Bun 1.3.11 can intermittently omit the
-`browserslist` executable link inside its cyclic peer dependency,
-`update-browserslist-db` ([upstream issue](https://github.com/oven-sh/bun/issues/30209)).
-The build restores that link after checking its installed target, keeping the
-expected dependency hash unchanged. Remove this workaround once the Bun pin
-includes the upstream fix.
+manifests and `bun.lock`. The pinned Bun 1.3.11 races while linking its
+package store ([upstream issue](https://github.com/oven-sh/bun/issues/30209)),
+and the outcome depends on download timing. A slow local network can reproduce
+one result every time while CI gets another. The build normalizes the two
+affected kinds of output:
+
+- Executable links between cyclic peer dependencies (`browserslist`,
+  `webpack`, ...) appear inconsistently. The build deletes every `.bin`
+  directory inside `node_modules/.bun/*/node_modules`. Those directories only
+  serve lifecycle scripts, which `--ignore-scripts` skips. Top-level and
+  workspace `.bin` links are kept.
+- The `playwright-core-mac-compat` alias and the real `playwright-core` race
+  for the store's fallback `node_modules/.bun/node_modules/playwright-core`
+  link. The build points it at the `@playwright/test` version.
+
+Remove these workarounds once the Bun pin includes the upstream fix. To check
+for new races, install repeatedly with a warm `BUN_INSTALL_CACHE_DIR` and
+compare `nix hash path` results. Cold installs on a slow network can hide them.
 
 Before pushing changes to dependencies, Nix inputs, CLI/shared source, embedded
 creator guides or preview assets, run the same deterministic validation as CI:
