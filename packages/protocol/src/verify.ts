@@ -1,4 +1,4 @@
-import { verifiedSymbol, verifyEvent, type NostrEvent } from 'nostr-tools';
+import { validateEvent, verifiedSymbol, verifyEvent, type NostrEvent } from 'nostr-tools';
 
 type Verifier = (event: NostrEvent) => boolean;
 
@@ -7,6 +7,24 @@ let enabling: Promise<void> | undefined;
 
 /** Checks the event id and schnorr signature once; later calls reuse the cached result. */
 export function verifySignature(event: NostrEvent): boolean {
+  // WASM's hex decoder accepts short inputs and reuses scratch buffers. Keep
+  // NIP-01 shape/length checks identical before either cryptographic backend,
+  // including calls that do not pass through the bounded manifest parser.
+  if (
+    !event ||
+    typeof event !== 'object' ||
+    !validateEvent(event) ||
+    typeof event.id !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(event.id) ||
+    typeof event.sig !== 'string' ||
+    !/^[a-f0-9]{128}$/.test(event.sig) ||
+    !Number.isSafeInteger(event.kind) ||
+    event.kind < 0 ||
+    event.kind > 65535 ||
+    !Number.isSafeInteger(event.created_at) ||
+    event.created_at < 0
+  )
+    return false;
   const cached = (event as { [verifiedSymbol]?: unknown })[verifiedSymbol];
   if (typeof cached === 'boolean') return cached;
   const valid = backend(event);
