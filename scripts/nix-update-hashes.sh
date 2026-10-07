@@ -13,7 +13,7 @@ trap 'rm -rf "$tmp_dir"' EXIT
 drv=$(nix eval --raw "$target.drvPath")
 build_target() {
   local status
-  echo "Checking $target ${*}"
+  echo "Checking $target ${*:-}"
   if nix build "$target" --no-link --print-build-logs "$@" >"$tmp_dir/build.log" 2>&1; then
     cat "$tmp_dir/build.log"
     return 0
@@ -42,7 +42,8 @@ else
     echo "Expected exactly one outputHash in $package_file, found $matches; no hash was changed." >&2
     exit 1
   fi
-  sed -i -E "s|^([[:space:]]*outputHash = )\"sha256-[^\"]+\";|\1\"${hash}\";|" "$package_file"
+  sed -E "s|^([[:space:]]*outputHash = )\"sha256-[^\"]+\";|\1\"${hash}\";|" "$package_file" >"$tmp_dir/package.nix"
+  cat "$tmp_dir/package.nix" >"$package_file"
   echo "Updated nodeModules outputHash to $hash in $package_file"
 fi
 
