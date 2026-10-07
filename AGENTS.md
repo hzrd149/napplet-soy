@@ -19,6 +19,18 @@ Optional Space presentation and source metadata must not become playback require
 An agenda entry records future work; it is not an instruction to implement every
 item or deploy. Follow the current user request for scope and deployment authorization.
 
+## Nix package validation
+
+Before pushing changes to Nix inputs, dependency manifests/lockfiles, CLI code,
+shared packages, embedded creator guides or bundled preview assets, run `bun run check:nix` (or
+`bash scripts/nix-check.sh`, without Bun). This realizes and force-rebuilds
+`nodeModules` and `soyli`, then runs `nix flake check`, including the NixOS VM
+regressions on x86_64 Linux (requires KVM). It uses `path:.` to include new files.
+Run `bun run update:nix-hashes` after a dependency hash mismatch; it only updates
+the exact `nodeModules` output hash and reruns the full check. Review the diff
+before committing. Bun download hashes and Node/Playwright pins remain explicit;
+see [docs/NIX.md](docs/NIX.md#maintaining-the-package).
+
 ## CLI error handling
 
 soyLI wraps tools and services: failures must preserve an actionable cause.

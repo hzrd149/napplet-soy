@@ -86,19 +86,45 @@ The build restores that link after checking its installed target, keeping the
 expected dependency hash unchanged. Remove this workaround once the Bun pin
 includes the upstream fix.
 
-After any dependency change, rebuild it and copy the reported hash into
-`nix/package.nix`:
+Before pushing changes to dependencies, Nix inputs, CLI/shared source, embedded
+creator guides or preview assets, run the same deterministic validation as CI:
 
 ```sh
-nix build .#nodeModules   # prints "got: sha256-…" on a mismatch
+bun run check:nix
+# Or without Bun installed:
+bash scripts/nix-check.sh
 ```
+
+The script first realizes `nodeModules` and `soyli`, then builds both again with
+`--rebuild` so cached fixed-output dependencies cannot hide stale hashes. Finally
+it runs `nix flake check`, including the NixOS VM regressions on x86_64 Linux
+(requires KVM). Checks run for the host system, not both supported architectures.
+The scripts anchor to the checkout and use `path:.`, including new and unstaged
+files; nothing is staged or pushed, and no `result` link is created. The package
+source is limited to build inputs so unrelated docs and maintenance scripts do
+not invalidate the compiled package.
+
+After a dependency change causes a `nodeModules` hash mismatch:
+
+```sh
+bun run update:nix-hashes
+# Or: bash scripts/nix-update-hashes.sh
+```
+
+The updater checks the dependency output, forcing a rebuild if it is cached,
+and only replaces `nodeModules.outputHash` in `nix/package.nix` when Nix reports
+a hash mismatch for that exact derivation. Unrelated errors are preserved and
+do not trigger edits. It then runs the full check above. Review the diff before
+committing; a verification failure leaves the edited hash in place for inspection
+and does not mean the package is verified. This command does not update
+`flake.lock`; use `nix flake update` deliberately and rerun validation.
 
 Changing the Bun pin in `package.json` also needs the two Bun release hashes in
 `nix/package.nix` (`nix store prefetch-file <url>`).
 
 ```sh
 nix build .#soyli && ./result/bin/soyli doctor
-nix flake check   # package and the NixOS VM test (x86_64-linux, needs KVM)
+nix flake check path:.   # ordinary check without forced rebuilds
 ```
 
 The VM test (`nix/test.nix`) checks offline doctor, the Nix-managed update refusal,

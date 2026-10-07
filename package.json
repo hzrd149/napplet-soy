@@ -17,6 +17,8 @@
     "test": "bun test packages apps/cli scripts",
     "test:browser": "bunx playwright test",
     "check": "bun run typecheck && bun run test",
+    "check:nix": "bash scripts/nix-check.sh",
+    "update:nix-hashes": "bash scripts/nix-update-hashes.sh",
     "fixtures": "bun scripts/seed.ts",
     "napplet": "bun apps/cli/src/index.ts",
     "soyli": "bun apps/cli/src/index.ts",

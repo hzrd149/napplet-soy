@@ -41,9 +41,39 @@
         "test-results"
       ];
 
-      src = nixpkgs.lib.cleanSourceWith {
+      cleanSource = nixpkgs.lib.cleanSourceWith {
         src = ./.;
         filter = path: _type: !(nixpkgs.lib.elem (baseNameOf path) sourceExclusions);
+      };
+
+      # Only package inputs: docs, maintenance scripts and local files should not
+      # change the compiled CLI. Still exclude generated files within these trees.
+      src = nixpkgs.lib.fileset.toSource {
+        root = ./.;
+        fileset = nixpkgs.lib.fileset.intersection (nixpkgs.lib.fileset.fromSource cleanSource) (
+          nixpkgs.lib.fileset.unions [
+            ./LICENSE
+            ./package.json
+            ./bun.lock
+            ./apps/cli
+            ./apps/cvm/package.json
+            ./apps/web/package.json
+            ./apps/web/src
+            ./apps/web/public
+            ./packages
+            ./scripts/cli-compile.ts
+            # These guides are embedded in generated creator workspaces.
+            ./docs/NIP5D-CREATOR.md
+            ./docs/RUNTIME-ACTIONS.md
+            ./docs/CONTROLLERS.md
+            ./docs/MOBILE.md
+            ./docs/WASM.md
+            ./docs/VISUAL-DESIGN.md
+            ./docs/BACKEND-CREATOR.md
+            ./docs/DYNAMIC-BACKENDS-CREATOR.md
+            ./docs/SHARED-DATA.md
+          ]
+        );
       };
     in
     {
