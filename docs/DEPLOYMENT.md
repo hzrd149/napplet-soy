@@ -3,25 +3,38 @@
 Deployment is operator-run. Routine changes are verified and committed locally;
 do not deploy or upload releases unless the user explicitly requests deployment.
 
-Updated 2026-10-06. **[napplet.soy](https://napplet.soy) is live**, using the temporary legacy CPU profile on the existing Namecheap VPS. Caddy issued valid Let's Encrypt certificates for the website, www, Blossom and Git; the other site remains available. The deploy script includes Caddy and PM2. Local production builds exercise the same web, relay, Blossom and GRASP implementations and PM2 definitions. Dedicated hosts use the pinned local Caddy version; shared hosts retain their existing Caddy. See the deployment record below for verification and the compatibility workaround.
+Updated 2026-10-07. **[napplet.soy](https://napplet.soy) is live**, using the temporary legacy CPU profile on the existing Namecheap VPS. Caddy issued valid Let's Encrypt certificates for the website, www, Blossom and Git; the other site remains available. The deploy script includes Caddy and PM2. Local production builds exercise the same web, relay, Blossom and GRASP implementations and PM2 definitions. Dedicated hosts use the pinned local Caddy version; shared hosts retain their existing Caddy. See the deployment record below for verification and the compatibility workaround.
 
-Latest verified website release: **`20261006111729495-77355`**, source `8f80965`,
-installer pinned to **soyLI 0.24.2**. [Native release CI](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37454517650)
-passed all four platform jobs and publication. Public checksums and an isolated
-installation verify the source revision, installer and new-project relay defaults.
+Latest verified website release: **`20261007184250765-95782`**, source
+`fed5a41f0de19aa01afb0e329ca86401c3cb77cf`, installer pinned to **soyLI 0.25.1**.
+[Native release CI](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37659569078)
+passed source checks, all four platform jobs and publication. All public asset
+checksums, the manifest source revision and an isolated installer/doctor/updater
+installation pass. [Nix CI](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37659563343)
+passed dependency/package realization, force-rebuild and offline NixOS VM checks.
 
-The normal deployment passed TypeScript and 552 source tests locally and on VPS
-Bun 1.3.8, including four failed-handshake/queued-timeout process regressions.
-Go race checks, relay/Blossom/GRASP integration, production build and three Linux
-backend isolation/backup/authorization tests passed before candidate activation.
-Fresh public desktop/390px browsers resolve Schlaus Kwab's name/avatar in both
-napplet heading and account header using the deployed seven-relay defaults;
-root/docs have no page errors or horizontal overflow. Public HTTPS, exact 0.24.2
-installer bytes, managed relay/Blossom/GRASP and current index health pass. Caddy,
-CVM and TURN are active; all five PM2 services are online with zero restarts at
-verification. Both shared proxy checksums are unchanged and schlaustronics.com
-returns 200. Persistent state was retained; `20261005095909023-57511` remains for
-rollback. This short verification window does not establish long-term uptime.
+The normal deployment passed TypeScript and 578 source tests locally and on VPS
+Bun 1.3.8, Go relay race/process checks, Blossom/GRASP integration, production build
+and three Linux backend isolation/authorization/backup regressions before activation.
+Fresh public desktop/390px browsers load the WASM verification chunk and instantiate
+it without fallback warnings or page errors. Root, a public napplet detail page and
+docs work without horizontal overflow. Public health reports the active release
+and a fresh, error-free index; the installer exactly matches the tagged source.
+All five PM2 processes are online with zero restarts at verification, and Caddy,
+CVM and TURN are active. Both shared proxy hashes are unchanged; schlaustronics.com
+returns HTTPS 200. Persistent state was retained; observed prior release
+`20261006135415572-54810` remains available for rollback. The port 3040/shared-Caddy/
+legacy-CPU profile is unchanged. No reboot, physical phone or long-term uptime
+qualification was performed in this verification window.
+
+### Previous verified rollout — 2026-10-06
+
+Website release `20261006111729495-77355`, source `8f80965`, pinned the installer
+to 0.24.2. TypeScript, all 552 source tests, native release CI, service integration
+and Linux backend checks passed. Fresh public desktop/mobile sessions resolved
+the affected creator's name/avatar in both napplet heading and account header.
+Shared proxy hashes were unchanged and the other site returned 200. The later
+observed production release `20261006135415572-54810` preceded today's deployment.
 
 ### Previous verified rollout — 2026-09-26
 

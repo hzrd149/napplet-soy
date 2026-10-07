@@ -1,9 +1,15 @@
 # soyLI releases and updates
 
 GitHub Releases distribute the standalone CLI independently of the website/VPS.
-The current published version is **0.25.0**.
+The current published version is **0.25.1**.
 
-**0.25.1 prepared 2026-10-07; release and deployment verification pending.**
+**0.25.1 published and deployed 2026-10-07 (Europe/Vienna):**
+[GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.25.1),
+source `fed5a41f0de19aa01afb0e329ca86401c3cb77cf`.
+[Release workflow 37659569078](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37659569078)
+passed source checks, all four native jobs and publication of all 11 assets.
+[Nix workflow 37659563343](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37659563343)
+passed dependency/package realization, force-rebuild and offline NixOS VM checks.
 
 The browser lazily loads `nostr-wasm` 0.1.0 for libsecp256k1 signature verification,
 with JavaScript retained until initialization succeeds and on initialization failure.
@@ -21,8 +27,20 @@ existing installer and `soyli update` workflow. See [Nix packaging](NIX.md).
 PR #7 passed all four native jobs and native Nix/VM checks at `e28d0a3`. Local
 TypeScript, 578 source tests (4,676 assertions), production build and desktop/390px
 browser checks pass. Browser checks confirm the WASM chunk initializes without
-fallback warnings, page errors or horizontal overflow. Final tag checks and public
-asset verification remain required before reporting this version as published.
+fallback warnings, page errors or horizontal overflow. All public archive checksums,
+installer and manifest match the tagged source; a separate installation reports
+0.25.1/current through both `doctor` and `update`.
+
+Website release `20261007184250765-95782` is live using the existing shared-Caddy,
+port 3040 and legacy-CPU profile. The standard deployment passed all 578 source
+tests on VPS Bun 1.3.8, Go relay race/process checks, Blossom/GRASP integration,
+production build and three Linux backend isolation/authorization/backup tests.
+Fresh public desktop/390px sessions confirm WASM initialization, root, napplet and
+docs pages without errors or overflow. The installer bytes match; the index is
+fresh and error-free, all five PM2 processes are online, and Caddy/CVM/TURN are active.
+Both shared proxy hashes are unchanged; the unrelated site returns HTTPS 200.
+Persistent state was retained and the prior website release remains for rollback.
+This verification does not certify a reboot, physical phones or long-term uptime.
 
 **0.25.0 published 2026-10-07 (Europe/Vienna):**
 [GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.25.0),
@@ -36,8 +54,8 @@ passed the fresh dependency build, package and offline NixOS VM at the same comm
 Public installer, manifest and macOS ARM64 archive checksums match. The installer
 is identical to the tagged source; the manifest identifies that source and all
 four native targets. An isolated public installation reports 0.25.0/current from
-both `doctor` and `update`. The website's pinned installer remains 0.24.2 until
-its separate deployment.
+both `doctor` and `update`. At publication the website's installer was still
+0.24.2; the later 0.25.1 deployment is recorded above.
 
 Creators can publish from their existing NIP-34 repository, selected explicitly
 or discovered from an owned `nostr://` Git remote. soyLI verifies the release
