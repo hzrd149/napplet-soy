@@ -3,6 +3,30 @@
 GitHub Releases distribute the standalone CLI independently of the website/VPS.
 The current published version is **0.24.2**.
 
+**0.25.0 prepared 2026-10-07 (Europe/Vienna); publication pending:**
+
+Creators can publish from their existing NIP-34 repository, selected explicitly
+or discovered from an owned `nostr://` Git remote. soyLI verifies the release
+commit against signed repository state and a serving clone URL without signing
+repository state or pushing a duplicate. Proposals, source links and deletion
+respect that repository; deleting a napplet keeps the creator's own repository.
+See [publishing from your own repository](PUBLISHING.md#publishing-from-your-own-nip-34-repository).
+Remote dynamic-backend builds still require soyLI-managed GRASP source; selecting
+an existing repository reports `BACKEND_SOURCE_LINKED` before contacting a provider.
+
+Optional Linux Nix/NixOS packaging supplies the pinned project toolchain and
+Playwright browsers from the store. Compatible Chromium/FFmpeg are reused without
+installer writes; mismatches report `CONFORMANCE_BROWSER` with recovery steps.
+Nix-managed installations update through Nix. Ordinary macOS/Linux archives
+retain their installer and `soyli update` workflow. See [Nix packaging](NIX.md).
+
+Native CI covers the packaged conformance path, and the offline NixOS VM exercises
+the actual upstream conformance command, toolchain, keyring and browser recovery.
+Metadata-worker and manager browser tests now synchronize on completed operations.
+The Nix dependency build repairs a verified Bun peer-bin-link race while retaining
+the locked dependency checksum. No dependency or protocol pin changes accompany
+this release. Website deployment is separate from publication.
+
 **0.24.2 published and deployed 2026-10-06 (Europe/Vienna):**
 [GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.24.2),
 source `8f809650b2fe4d1fd4f6bf045159d28868a893ae`.
