@@ -1,6 +1,7 @@
-import { nip19, verifyEvent } from 'nostr-tools';
+import { nip19 } from 'nostr-tools';
 import { z } from 'zod';
 import { normalizeTopic } from './topics';
+import { verifySignature } from './verify';
 
 export const NAPPLET_KIND = 35129;
 export const ROOT_NAPPLET_KIND = 15129;
@@ -73,11 +74,12 @@ export async function aggregateHash(paths: Array<{ path: string; hash: string }>
 }
 export function verifiedEvent(input: unknown): SignedEvent {
   const event = eventSchema.parse(input);
-  if (new TextEncoder().encode(JSON.stringify(event)).length > 65536 || !verifyEvent(event))
+  if (new TextEncoder().encode(JSON.stringify(event)).length > 65536 || !verifySignature(event))
     throw new Error('Invalid Nostr signature');
   return event;
 }
 export { validateRelease } from './manifest';
+export { enableWasmVerification, verifySignature } from './verify';
 
 export const gallerySearchSchema = z.object({
   tag: z.string().max(256).transform(normalizeTopic).catch(''),

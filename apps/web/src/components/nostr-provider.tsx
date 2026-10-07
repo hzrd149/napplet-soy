@@ -2,9 +2,12 @@ import { protocolClient, network } from '@/lib/network';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { EventStoreProvider } from 'applesauce-react/providers';
 import { createNostrClient } from '../../../../packages/nostr/src/client';
+import { enableWasmVerification } from '../../../../packages/protocol/src/verify';
 import { browserIdentity, type IdentityState } from '../lib/browser-identity';
 import { useAdminAccess, type AdminAccess } from '../lib/admin-client';
 import { IdentityMenu } from './identity-menu';
+
+if (typeof window !== 'undefined') void enableWasmVerification();
 
 const Context = createContext<{
   pubkey: string | null;

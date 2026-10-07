@@ -1,5 +1,6 @@
 import { Database } from 'bun:sqlite';
-import { verifyEvent, type NostrEvent, type EventTemplate } from 'nostr-tools';
+import { type NostrEvent, type EventTemplate } from 'nostr-tools';
+import { verifySignature } from '../../protocol/src/verify';
 import { z } from 'zod';
 import { diagnose, redactDiagnostic } from '../../diagnostics/src';
 import {
@@ -158,7 +159,7 @@ export class DynamicBackends {
     const receipt = JSON.parse(row.receipt) as NostrEvent;
     const { release, ...payload } = JSON.parse(receipt.content);
     if (
-      !verifyEvent(receipt) ||
+      !verifySignature(receipt) ||
       receipt.pubkey !== this.options.provider ||
       release !== id ||
       digest(canonical(payload)) !== id ||
@@ -188,7 +189,7 @@ export class DynamicBackends {
     );
     try {
       if (
-        !verifyEvent(proof) ||
+        !verifySignature(proof) ||
         (account && proof.pubkey !== account) ||
         proof.kind !== expected.kind ||
         Math.abs(proof.created_at - expected.created_at) > 300 ||
@@ -341,7 +342,7 @@ export class DynamicBackends {
       content: canonical({ ...payload, release }),
     });
     if (
-      !verifyEvent(JSON.parse(JSON.stringify(receipt))) ||
+      !verifySignature(JSON.parse(JSON.stringify(receipt))) ||
       receipt.pubkey !== this.options.provider ||
       receipt.content !== canonical({ ...payload, release })
     )

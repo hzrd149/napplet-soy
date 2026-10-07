@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { z } from 'zod';
-import { verifyEvent, type NostrEvent } from 'nostr-tools';
+import { type NostrEvent } from 'nostr-tools';
+import { verifySignature } from '../../protocol/src/verify';
 import { decodeAddress, identityAddress } from '../../protocol/src';
 
 import {
@@ -58,7 +59,7 @@ export class Boards {
     const expected = boardAuthorization(this.provider, actor, definition, this.now());
     try {
       if (
-        !verifyEvent(proof) ||
+        !verifySignature(proof) ||
         proof.pubkey !== owner ||
         proof.kind !== expected.kind ||
         Math.abs(proof.created_at - expected.created_at) > 300 ||

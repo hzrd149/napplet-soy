@@ -1,19 +1,10 @@
 import { EventStore } from 'applesauce-core';
 import { RelayPool } from 'applesauce-relay';
-import { verifiedEvent, type SignedEvent } from '../../protocol/src';
+import { verifiedEvent, verifySignature, type SignedEvent } from '../../protocol/src';
 
 /** One store per browser app or server request; never share signer state between requests. */
 export function createNostrClient(events: SignedEvent[] = []) {
-  const store = new EventStore({
-    verifyEvent: (event) => {
-      try {
-        verifiedEvent(event);
-        return true;
-      } catch {
-        return false;
-      }
-    },
-  });
+  const store = new EventStore({ verifyEvent: verifySignature });
   for (const event of events) store.add(verifiedEvent(event));
   let pool: RelayPool | undefined;
   return {

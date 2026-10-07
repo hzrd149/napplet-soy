@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { verifyEvent, type NostrEvent } from 'nostr-tools';
+import { type NostrEvent } from 'nostr-tools';
+import { verifySignature } from '../../protocol/src/verify';
 import { ApplesauceRelayPool } from '@contextvm/sdk/relay';
 import type { PrivateKeySigner } from '@contextvm/sdk/signer';
 import { sha256 } from '../../protocol/src/artifact';
@@ -238,7 +239,7 @@ export class NappletWebrtc {
       event.content.length > 64000 ||
       Math.abs(Date.now() / 1000 - event.created_at) > 60 ||
       s.seen.has(event.id) ||
-      !verifyEvent(event)
+      !verifySignature(event)
     )
       return;
     if (s.seen.size >= 2048) s.seen.delete(s.seen.values().next().value!);
