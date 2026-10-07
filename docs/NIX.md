@@ -79,26 +79,64 @@ The build intentionally fails when nixpkgs drifts from the CLI's pins:
 must equal `@playwright/test`. Update the pins and nixpkgs together.
 
 `soyli-node-modules` is a fixed-output derivation of `bun install` over the
-manifests and `bun.lock`. The pinned Bun 1.3.11 can intermittently omit the
-`browserslist` executable link inside its cyclic peer dependency,
-`update-browserslist-db` ([upstream issue](https://github.com/oven-sh/bun/issues/30209)).
-The build restores that link after checking its installed target, keeping the
-expected dependency hash unchanged. Remove this workaround once the Bun pin
-includes the upstream fix.
+manifests and `bun.lock`. The pinned Bun 1.3.11 races while linking its
+package store ([upstream issue](https://github.com/oven-sh/bun/issues/30209)),
+and the outcome depends on download timing. A slow local network can reproduce
+one result every time while CI gets another. The build normalizes the two
+affected kinds of output:
 
-After any dependency change, rebuild it and copy the reported hash into
-`nix/package.nix`:
+- Executable links between cyclic peer dependencies (`browserslist`,
+  `webpack`, ...) appear inconsistently. The build deletes every `.bin`
+  directory inside `node_modules/.bun/*/node_modules`. Those directories only
+  serve lifecycle scripts, which `--ignore-scripts` skips. Top-level and
+  workspace `.bin` links are kept.
+- The `playwright-core-mac-compat` alias and the real `playwright-core` race
+  for the store's fallback `node_modules/.bun/node_modules/playwright-core`
+  link. The build points it at the `@playwright/test` version.
+
+Remove these workarounds once the Bun pin includes the upstream fix. To check
+for new races, install repeatedly with a warm `BUN_INSTALL_CACHE_DIR` and
+compare `nix hash path` results. Cold installs on a slow network can hide them.
+
+Before pushing changes to dependencies, Nix inputs, CLI/shared source, embedded
+creator guides or preview assets, run the same deterministic validation as CI:
 
 ```sh
-nix build .#nodeModules   # prints "got: sha256-…" on a mismatch
+bun run check:nix
+# Or without Bun installed:
+bash scripts/nix-check.sh
 ```
+
+The script first realizes `nodeModules` and `soyli`, then builds both again with
+`--rebuild` so cached fixed-output dependencies cannot hide stale hashes. Finally
+it runs `nix flake check`, including the NixOS VM regressions on x86_64 Linux
+(requires KVM). Checks run for the host system, not both supported architectures.
+The scripts anchor to the checkout and use `path:.`, including new and unstaged
+files; nothing is staged or pushed, and no `result` link is created. The package
+source is limited to build inputs so unrelated docs and maintenance scripts do
+not invalidate the compiled package.
+
+After a dependency change causes a `nodeModules` hash mismatch:
+
+```sh
+bun run update:nix-hashes
+# Or: bash scripts/nix-update-hashes.sh
+```
+
+The updater checks the dependency output, forcing a rebuild if it is cached,
+and only replaces `nodeModules.outputHash` in `nix/package.nix` when Nix reports
+a hash mismatch for that exact derivation. Unrelated errors are preserved and
+do not trigger edits. It then runs the full check above. Review the diff before
+committing; a verification failure leaves the edited hash in place for inspection
+and does not mean the package is verified. This command does not update
+`flake.lock`; use `nix flake update` deliberately and rerun validation.
 
 Changing the Bun pin in `package.json` also needs the two Bun release hashes in
 `nix/package.nix` (`nix store prefetch-file <url>`).
 
 ```sh
 nix build .#soyli && ./result/bin/soyli doctor
-nix flake check   # package and the NixOS VM test (x86_64-linux, needs KVM)
+nix flake check path:.   # ordinary check without forced rebuilds
 ```
 
 The VM test (`nix/test.nix`) checks offline doctor, the Nix-managed update refusal,

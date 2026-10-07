@@ -2,13 +2,13 @@ import { EventStore } from 'applesauce-core';
 import { RelayPool } from 'applesauce-relay';
 import { matchFilters, type Filter } from 'nostr-tools';
 import { Observable, Subject, shareReplay, take, takeUntil, takeWhile, timer } from 'rxjs';
-import { verifiedEvent, type SignedEvent } from '../../protocol/src';
+import { verifiedEvent, verifySignature, type SignedEvent } from '../../protocol/src';
 import { readRelayUrl } from '../../nostr/src/relay-policy';
 import { redactDiagnostic } from '../../diagnostics/src';
 
 /** A browser-owned, signer-free store; all wire events are verified before ingestion. */
 export class ProtocolClient {
-  readonly store = new EventStore();
+  readonly store = new EventStore({ verifyEvent: verifySignature });
   private retained = new Map<string, number>();
   // EventStore consumes kind 5 into its deletion manager instead of storing the event.
   // Our reducers need the signed request's timestamp/author, within the same byte budget.

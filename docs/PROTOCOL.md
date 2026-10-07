@@ -100,6 +100,15 @@ The new protocol tuple `(dTag, artifactHash)` does not replace the full public i
 - The local preview and public player use the same runtime library and production bundle policy. A normal unsandboxed Vite page does not prove the napplet will run on the website.
 - Current host capabilities and operation limits are recorded in [PUBLIC-RUNTIME.md](PUBLIC-RUNTIME.md). Required domains are checked from the signed manifest for every napplet, including fixtures. Direct browser networking remains blocked; supported resource and relay operations go through the host.
 
+Signature checks use one shared NIP-01 field validator before either JavaScript
+or the browser's optional libsecp256k1-WASM accelerator. IDs/public keys must be
+64 lowercase hexadecimal characters, signatures 128; kinds are integers in
+0–65535, timestamps are nonnegative safe integers, and tags contain strings.
+This guard also applies to direct CVM discovery and WebRTC signaling, which do
+not pass through the bounded manifest parser. The accelerator changes no event
+format, NAP permission or iframe policy; load/initialization failure retains
+JavaScript verification. Verified event objects are treated as immutable.
+
 New manifests require exactly one two-element `x` tag with the raw HTML SHA-256. Legacy manifests retain the pinned path/aggregate checks. The shared parser selects the format explicitly and never retries a failed new manifest as legacy. Reject invalid signatures, malformed or conflicting identity fields, inconsistent hashes and unsupported required capabilities. Missing optional capabilities do not block execution. The complete required set is checked locally; a relay filter match is not a compatibility verdict.
 
 Icons, covers, metadata, and source archives live on Blossom too, but are separate from the playable artifact. This preserves a single self-contained runtime artifact.

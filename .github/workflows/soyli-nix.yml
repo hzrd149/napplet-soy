@@ -11,6 +11,9 @@ on:
       - 'apps/web/public/**'
       - 'packages/**'
       - 'scripts/cli-*'
+      - 'scripts/nix-*'
+      - 'apps/cvm/package.json'
+      - 'docs/**'
       - 'package.json'
       - 'bun.lock'
   push:
@@ -24,6 +27,9 @@ on:
       - 'apps/web/public/**'
       - 'packages/**'
       - 'scripts/cli-*'
+      - 'scripts/nix-*'
+      - 'apps/cvm/package.json'
+      - 'docs/**'
       - 'package.json'
       - 'bun.lock'
   workflow_dispatch:
@@ -49,4 +55,4 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
       - name: Build package and run offline NixOS VM regressions
-        run: nix flake check --print-build-logs
+        run: bash scripts/nix-check.sh

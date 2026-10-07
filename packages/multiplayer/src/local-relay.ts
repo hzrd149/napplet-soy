@@ -1,4 +1,5 @@
-import { matchFilters, verifyEvent, type NostrEvent, type Filter } from 'nostr-tools';
+import { matchFilters, type NostrEvent, type Filter } from 'nostr-tools';
+import { verifySignature } from '../../protocol/src/verify';
 import { z } from 'zod';
 
 /** Bounded loopback-only preview relay. Production and full-stack dev use Khatru. */
@@ -78,7 +79,7 @@ export function startLocalBackendRelay() {
               ![1059, 21059, 25910, 25050, 11316, 11317, 11318, 11319, 10002].includes(
                 event.kind,
               ) ||
-              !verifyEvent(event)
+              !verifySignature(event)
             )
               return;
             if (event.kind < 20000 || event.kind >= 30000) {

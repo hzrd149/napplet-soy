@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { PrivateKeySigner } from '@contextvm/sdk/signer';
 import { ApplesauceRelayPool } from '@contextvm/sdk/relay';
 import { computeCommonSchemaHash } from '@contextvm/sdk/core/utils/common-schema';
-import { generateSecretKey, verifyEvent } from 'nostr-tools';
+import { generateSecretKey } from 'nostr-tools';
+import { verifySignature } from '../../protocol/src/verify';
 import {
   CvmConnection,
   validateProvider,
@@ -266,7 +267,11 @@ export class NappletBackend {
             await pool.subscribe(
               [{ kinds: [11316], limit: query.limit }],
               (event) => {
-                if (!verifyEvent(event) || event.content.length > 8192 || found.size >= query.limit)
+                if (
+                  !verifySignature(event) ||
+                  event.content.length > 8192 ||
+                  found.size >= query.limit
+                )
                   return;
                 let metadata: Record<string, unknown> = {};
                 try {
