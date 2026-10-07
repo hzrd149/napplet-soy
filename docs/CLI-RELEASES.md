@@ -3,6 +3,27 @@
 GitHub Releases distribute the standalone CLI independently of the website/VPS.
 The current published version is **0.25.0**.
 
+**0.25.1 prepared 2026-10-07; release and deployment verification pending.**
+
+The browser lazily loads `nostr-wasm` 0.1.0 for libsecp256k1 signature verification,
+with JavaScript retained until initialization succeeds and on initialization failure.
+Shared event verification avoids a second cryptographic check at EventStore ingestion.
+Both backends reject malformed wire fields before cryptographic verification or
+cache reuse, including empty/truncated IDs and signatures. Direct CVM discovery and
+WebRTC signaling use the same checks; manifest formats and napplet grants are unchanged.
+
+The Nix dependency tree now normalizes timing-dependent Bun peer links and its
+Playwright fallback before applying the refreshed fixed-output hash. Explicit
+realize/rebuild/VM checks and a guarded hash-refresh command support maintenance;
+the updater works with macOS Bash 3.2 and BSD sed. Ordinary installations keep the
+existing installer and `soyli update` workflow. See [Nix packaging](NIX.md).
+
+PR #7 passed all four native jobs and native Nix/VM checks at `e28d0a3`. Local
+TypeScript, 578 source tests (4,676 assertions), production build and desktop/390px
+browser checks pass. Browser checks confirm the WASM chunk initializes without
+fallback warnings, page errors or horizontal overflow. Final tag checks and public
+asset verification remain required before reporting this version as published.
+
 **0.25.0 published 2026-10-07 (Europe/Vienna):**
 [GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.25.0),
 source `3bc111c723848edc86e90c4a23240f79f80e246c`.
