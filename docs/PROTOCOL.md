@@ -54,6 +54,19 @@ use the same byte/hash/MIME admission. No new website resource proxy is introduc
 WebM classification and Blob fonts are now supported by the shared host; limits and
 remaining gaps are in [ASSETS.md](ASSETS.md) and [PUBLIC-RUNTIME.md](PUBLIC-RUNTIME.md).
 
+## Related asset discovery — feature branch
+
+Prepared soyLI HTML exposes external managed asset hashes using HTML
+`<link rel="related">` elements and [BUD-10 at
+`342cae9e5152c5214c83ca1f7f473c2eba0256f1`](https://github.com/hzrd149/blossom/blob/342cae9e5152c5214c83ca1f7f473c2eba0256f1/buds/10.md).
+These declarations are covered by the HTML artifact hash. The selected NIP-5D and
+NAP-RESOURCE pins remain unchanged, including RESOURCE's `blossom:sha256:<hash>`
+call syntax. The links use BUD-10's `blossom:<hash>.<ext>?sz=<bytes>` discovery syntax.
+No manifest extension, runtime grant, publisher gate or playback requirement is added.
+Existing artifacts without links remain valid. See [asset coverage](ASSETS.md#related-resource-links--feature-branch)
+for undeclared/dynamic resources and offline limits. Runtime backup support and
+release/deployment are separate work.
+
 ## Rust/WASM authoring — 2026-09-23 source
 
 The optional Rust build recipe embeds gzip-packed executable WASM and bundled

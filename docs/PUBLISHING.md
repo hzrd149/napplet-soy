@@ -312,3 +312,13 @@ confirmed absence, retained shared data and incomplete requests. No manifest
 extension or website deletion API is required. NIP-5D and NAP pins are unchanged.
 GRASP retains deleted repository archives for 90 days by default; copies and forks
 outside the selected services are not recalled.
+
+## Related game resources — feature branch
+
+Publication and playable proposal previews include deterministic BUD-10
+`<link rel="related">` declarations for external managed assets inside the prepared
+HTML, before browser checks, artifact hashing and freezing. The signed `x` therefore
+covers these declarations. Retries reuse frozen bytes rather than adding metadata to
+older jobs. Editable legacy HTML and committed source archives stay source; builds
+write the declarations into `dist/index.html`. See [asset coverage and backup limits](ASSETS.md#related-resource-links--feature-branch).
+This behavior is implemented on the feature branch; release/deployment is separate.

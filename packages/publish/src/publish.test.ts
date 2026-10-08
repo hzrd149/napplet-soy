@@ -431,6 +431,14 @@ test('managed external assets are uploaded before announcement, resume unchanged
     const job = await f.load();
     expect('snapshotId' in result && result.snapshotId).toBe(job.snapshot!.id);
     expect(f.writes.filter((w) => w === asset.hash)).toHaveLength(1);
+    const html = f.blobs.get(job.plan.artifactHash)!;
+    expect(await sha256(html)).toBe(job.plan.artifactHash);
+    expect(new TextDecoder().decode(html)).toContain(
+      `href="blossom:${asset.hash}.png?sz=${asset.bytes}"`,
+    );
+    expect(job.current!.tags).toContainEqual(['x', await sha256(html)]);
+    expect(await Bun.file(join(f.project, 'index.html')).text()).not.toContain('rel="related"');
+    expect(job.plan.artifactHash).toBe(pending.plan.artifactHash);
     const remix = await createRemix(f.root, 'remixed-assets', {
       manifest: job.snapshot!,
       artifact: f.blobs.get(job.plan.artifactHash)!,

@@ -1,3 +1,4 @@
+import { relatedAssetHtml } from '../../../../packages/assets/src/related';
 import { diagnose, formatDiagnostic } from '../../../../packages/diagnostics/src';
 import { manageProject, editProject } from '../manager';
 import type { Workshop } from '../workshop';
@@ -76,10 +77,11 @@ export function startPreviewServer(
     const binding = await readBinding(fileURLToPath(root));
     const configText = JSON.stringify({ ...JSON.parse(portableText), ...(binding?.project ?? {}) });
     const config = configSchema.parse(JSON.parse(configText));
-    const bytes = await regularFile(fileURLToPath(root), config.entry, MAX_ARTIFACT_BYTES);
+    const originalBytes = await regularFile(fileURLToPath(root), config.entry, MAX_ARTIFACT_BYTES);
+    const managed = await readAssets(fileURLToPath(root));
+    const bytes = await relatedAssetHtml(originalBytes, managed);
     if (bytes.length > MAX_ARTIFACT_BYTES || configText.length > 16384)
       throw new Error('Project exceeds preview limits.');
-    const managed = await readAssets(fileURLToPath(root));
     const artifactHash = await sha256(bytes);
     const backend = listing.backend ? await backendProject(fileURLToPath(root)) : undefined;
     const info: PreviewRevision = {
