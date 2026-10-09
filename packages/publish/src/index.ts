@@ -28,6 +28,7 @@ import {
   type PublishPlan,
 } from './project';
 import { PublicationRelays } from './relay';
+import { resolveOutbox } from './outbox';
 import { ownedBlobs, verifiedBlob } from './blobs';
 import { confirmWebsite } from './website';
 import { executableBytes } from './artifact';
@@ -131,6 +132,7 @@ function result(job: PublishJob, unchanged = false) {
       : null,
     mirrors: job.mirrors,
     mirrorErrors: job.mirrorErrors ?? {},
+    outbox: job.outbox ?? null,
     receipts: job.receipts,
     error: job.error ?? null,
   };
@@ -273,6 +275,7 @@ export async function publishProject(options: PublishOptions) {
         'sandbox startup and preview capture',
         'remote current version',
         'Git/Blossom/relay availability',
+        'your NIP-65 outbox relays (best-effort copies)',
         ...(selected ? ['release commit pushed to your repository'] : []),
       ],
     };
@@ -967,33 +970,85 @@ export async function publishProject(options: PublishOptions) {
         job.receipts.current = true;
         await save();
         await guard();
-        for (const mirror of job.plan.targets.mirrors) {
-          progress('mirror');
-          let event = job.preview?.descriptor ?? job.snapshot;
+        // Copies are best effort: a failure is recorded without undoing the primary release.
+        const copy = async (url: string, operation: string, recovery: string) => {
+          let event = currentJob.preview?.descriptor ?? currentJob.snapshot!;
           try {
-            for (const next of [job.preview?.descriptor, job.snapshot, job.current]) {
+            for (const next of [
+              currentJob.preview?.descriptor,
+              currentJob.snapshot,
+              currentJob.current,
+            ]) {
               if (!next) continue;
               event = next;
-              await relays.ensure(mirror, event);
+              await relays.ensure(url, event);
             }
-            job.mirrors[mirror] = true;
-            if (job.mirrorErrors) delete job.mirrorErrors[mirror];
+            return null;
           } catch (cause) {
-            job.mirrors[mirror] = false;
-            const diagnostic = diagnose(cause, 'publish optional mirror');
-            job.mirrorErrors ??= {};
-            job.mirrorErrors[mirror] = {
+            const diagnostic = diagnose(cause, operation);
+            return {
               eventId: event.id,
               eventKind: event.kind,
               attemptedAt: Date.now(),
               diagnostic: {
                 ...diagnostic,
                 retryable: diagnostic.retryable ?? true,
-                recovery:
-                  'The primary publication is unaffected. With unchanged source, rerun soyli publish to repair copies of the same signed release. Edit future mirrors in soyli dev (Where it goes).',
+                recovery,
               },
             };
           }
+        };
+        for (const mirror of job.plan.targets.mirrors) {
+          progress('mirror');
+          const failure = await copy(
+            mirror,
+            'publish optional mirror',
+            'The primary publication is unaffected. With unchanged source, rerun soyli publish to repair copies of the same signed release. Edit future mirrors in soyli dev (Where it goes).',
+          );
+          job.mirrors[mirror] = !failure;
+          if (failure) {
+            job.mirrorErrors ??= {};
+            job.mirrorErrors[mirror] = failure;
+          } else if (job.mirrorErrors) delete job.mirrorErrors[mirror];
+          await save();
+        }
+        if (relays.read) {
+          // The creator's own NIP-65 write relays let outbox clients find the release.
+          progress('outbox');
+          const lookup = await resolveOutbox(
+            relays.read.bind(relays),
+            account.pubkey,
+            job.plan.targets,
+            options.network,
+          );
+          const outbox: NonNullable<PublishJob['outbox']> = {
+            checkedAt: Date.now(),
+            source: lookup.source,
+            ...(lookup.eventId ? { eventId: lookup.eventId } : {}),
+            relays: lookup.relays,
+            ignored: lookup.ignored,
+            ...(lookup.error
+              ? {
+                  lookupError: {
+                    ...lookup.error,
+                    retryable: lookup.error.retryable ?? true,
+                  },
+                }
+              : {}),
+            copies: {},
+            errors: {},
+          };
+          for (const url of lookup.relays) {
+            progress('outbox');
+            const failure = await copy(
+              url,
+              'publish to creator outbox relay',
+              'The primary publication is unaffected. With unchanged source, rerun soyli publish to retry; each run reads your current NIP-65 relay list.',
+            );
+            outbox.copies[url] = !failure;
+            if (failure) outbox.errors[url] = failure;
+          }
+          job.outbox = outbox;
           await save();
         }
         job.status = 'announced_pending_index';

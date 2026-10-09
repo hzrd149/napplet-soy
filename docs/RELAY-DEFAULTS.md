@@ -68,6 +68,11 @@ Explicit operator, browser and project settings remain authoritative. Existing
 projects with saved mirror lists keep those lists; use **Manage project → Where
 it goes** in `soyli dev` to edit Extra relay copies, or edit the effective
 configuration shown by `soyli config`. `mirrors: []` still disables extra copies.
+
+Separately, publishing looks up the creator's NIP-65 relay list and copies the
+release to their write relays (see [Your outbox relays](PUBLISHING.md#your-outbox-relays-nip-65)).
+For that lookup only, the public network also reads the relay-list indexer
+`wss://purplepag.es`; it is not a discovery default or publication target.
 Saved publication jobs retain their original destinations. Browser users can
 reset Network settings with **Use site defaults** after deployment, or configure
 their own destinations immediately. Operator `SPACE_INDEX_RELAYS` and
