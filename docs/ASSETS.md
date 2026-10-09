@@ -37,6 +37,51 @@ as a required capability. The inventory/helper are authoring conventions; playba
 on another host does not require parsing our lockfile or contacting napplet.soy.
 Use `releaseAssetUrls()` when a long-lived app no longer needs cached Blob URLs.
 
+### Related resource links — feature branch
+
+soyLI builds and prepares playable HTML with one `<link rel="related">` in its
+`<head>` for every distinct external asset hash in `napplet.assets.json`. For example:
+
+```html
+<link
+  rel="related"
+  data-soyli-related
+  href="blossom:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.bin?sz=12345"
+  type="application/octet-stream"
+/>
+```
+
+These links follow [BUD-10 at `342cae9e`](https://github.com/hzrd149/blossom/blob/342cae9e5152c5214c83ca1f7f473c2eba0256f1/buds/10.md).
+The extension comes from the verified content-addressed original; unknown formats
+use `.bin`. The size describes the original bytes. Links are sorted by hash and
+include every external inventory entry, including resources loaded later in gameplay.
+Embedded assets already travel with the HTML and have no generated related link.
+The pinned NAP-RESOURCE helper still calls `blossom:sha256:<hash>`; the discovery
+links do not change that API or any NIP-5D/NAP pin.
+
+A runtime can parse these links from hash-verified HTML without executing game
+code or reading the soyLI inventory, then fetch and hash-verify each resource using
+the signed manifest's Blossom server hints. Generated links omit uploader/server
+hints so builds remain independent of publication account and destination.
+Preparation keeps declarations in the document head even when its end tag is
+omitted, preserves leading comments and doctypes, and leaves template/vector heads alone.
+Author-written related links are preserved. Rebuilds replace only links marked
+`data-soyli-related`; reserve that attribute for soyLI output.
+
+`soyli build` writes links into `dist/index.html`. Local preview and publication
+inspection apply the same preparation in memory, including legacy `index.html`
+projects, whose editable source remains unchanged. Checks, proposal previews and
+publication hash the prepared bytes. Frozen retries retain their original artifact,
+including jobs created before this feature. Source archives retain committed source.
+
+This lists declared external resources, not every possible runtime dependency.
+Register manually referenced assets in the inventory or declare their own related
+links. Dynamically discovered blobs, resources inside opaque packs, backend services
+and mutable relay data are not automatically enumerated. Presentation covers/clips
+and source archives retain their separate signed metadata. Related links do not
+grant networking permissions or guarantee offline gameplay. Runtime offline saving
+and backup UI are separate work. This feature is not yet released or deployed.
+
 ### Data packs, maps and other non-media assets
 
 The managed importer also accepts hash-verified binary data, JSON and plain text.

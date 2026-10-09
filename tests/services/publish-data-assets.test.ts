@@ -146,7 +146,7 @@ test('large sources and a 12 MiB game publish, resume data assets and retain his
     const frozen = await journal.load((await journal.index()).active!);
     expect(frozen.commit).toBe(releaseCommit);
     expect(frozen.plan.files.length).toBeGreaterThan(128);
-    expect(frozen.plan.files.find((file) => file.path === 'index.html')?.size).toBe(
+    expect(frozen.plan.files.find((file) => file.path === 'index.html')?.size).toBeGreaterThan(
       12 * 1024 * 1024,
     );
     expect(frozen.receipts.snapshot).toBe(false);
@@ -194,6 +194,29 @@ test('large sources and a 12 MiB game publish, resume data assets and retain his
     );
     const release = await validateRelease(complete.current, complete.snapshot);
     expect(release.current.tags).toContainEqual(['R', 'resource']);
+    const publishedHtml = await (
+      await fetch(`${proxy.url.origin}/${complete.plan.artifactHash}`)
+    ).bytes();
+    expect(await sha256(publishedHtml)).toBe(complete.plan.artifactHash);
+    const related: string[] = [];
+    await new HTMLRewriter()
+      .on('head link[rel="related"]', {
+        element(element) {
+          related.push(element.getAttribute('href')!);
+        },
+      })
+      .transform(new Response(publishedHtml))
+      .arrayBuffer();
+    expect(related).toHaveLength(imported.length);
+    for (const asset of imported) {
+      const uri = related.find((value) => value.startsWith(`blossom:${asset.hash}.`))!;
+      expect(uri).toContain(`sz=${asset.bytes}`);
+      // Back up declared bytes using only HTML references and the manifest server.
+      const hash = /^blossom:([a-f0-9]{64})\./.exec(uri)![1];
+      const bytes = await (await fetch(`${proxy.url.origin}/${hash}`)).bytes();
+      expect(await sha256(bytes)).toBe(hash);
+      expect(bytes.length).toBe(asset.bytes);
+    }
     const archiveResponse = await fetch(`${proxy.url.origin}/${complete.archiveHash}`);
     expect(archiveResponse.status).toBe(200);
     const archiveBytes = await archiveResponse.bytes();

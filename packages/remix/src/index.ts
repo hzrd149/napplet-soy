@@ -1,5 +1,6 @@
 import { DiagnosticError } from '../../diagnostics/src';
-import { validateAssets } from '../../assets/src';
+import { validateAssets, parseAssets, ASSET_LOCK } from '../../assets/src';
+import { relatedAssetHtml } from '../../assets/src/related';
 import { ProtocolClient } from '../../client/src/nostr';
 import { readRepository, repositoryRef } from '../../collaboration/src/protocol';
 import { cloneRevision } from '../../collaboration/src/git';
@@ -218,8 +219,18 @@ export async function createRemix(
     ? projectSchema.parse(JSON.parse(decode('napplet.json')))
     : undefined;
   const entry = previous?.entry ?? 'index.html';
-  if (files.has(entry) && (await sha256(files.get(entry)!)) !== (await sha256(input.artifact)))
-    throw new Error('Source archive does not contain this version’s artifact');
+  if (files.has(entry)) {
+    const source = files.get(entry)!;
+    const artifactHash = await sha256(input.artifact);
+    // Legacy HTML remains editable source. Accept only the exact deterministic
+    // resource-link preparation, retaining the byte equality guard for all else.
+    if (
+      (await sha256(source)) !== artifactHash &&
+      (await sha256(await relatedAssetHtml(source, parseAssets(files.get(ASSET_LOCK))))) !==
+        artifactHash
+    )
+      throw new Error('Source archive does not contain this version’s artifact');
+  }
   const target = resolve(parent, name);
   try {
     await mkdir(target); // Refuse overwrite before writing any source.

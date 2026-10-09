@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { importAsset, readAssets } from '../../packages/assets/src';
+import { relatedAssetHtml } from '../../packages/assets/src/related';
 import { startPreviewServer } from '../../apps/cli/src/preview/server';
 import { previewAssets } from '../../apps/cli/src/preview/assets';
 
@@ -228,3 +229,76 @@ test('manager saves files and the real sandbox decodes media and data packs thro
     await rm(root, { recursive: true, force: true });
   }
 }, 60000);
+
+test('related resource preparation preserves browser head discovery and rendering mode', async () => {
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage();
+    const hash = 'a'.repeat(64);
+    const lock = {
+      version: 1 as const,
+      assets: [
+        {
+          id: 'pack',
+          hash,
+          path: `assets/${hash}.bin`,
+          bytes: 4,
+          mime: 'application/octet-stream',
+          storage: 'external' as const,
+          license: 'MIT',
+          source: '',
+        },
+      ],
+    };
+    const fixtures = [
+      '<!doctype html><html><head><title>Game</title></head><body>Play</body></html>',
+      '<!doctype html><html><head><title>Game</title><body>Play</body></html>',
+      '<!-- Game license: MIT -->\n<!doctype html><html lang="en"><title>Game</title><body>Play</body></html>',
+      '<!-- First --><!-- Second -->\n<!DOCTYPE html SYSTEM "about:legacy-compat"><html><title>Game</title><body>Play</body></html>',
+      '<!doctype html><title>Game</title><meta name="game-data" content="level-1"><p>Play</p>',
+      '<!doctype html><html lang="en"><body>Play</body></html>',
+      '<!doctype html><html><body><template><head><title>Template</title></head></template>Play</body></html>',
+      '<!doctype html><svg><head><title>Vector</title></head></svg>',
+      '\u00a0<p>Play</p>',
+      '\ufeff<!-- License -->\n<!doctype html><html><title>Game</title><body>Play</body></html>',
+      'Plain text game',
+      '<html><title>Game</title><body>Play</body></html>',
+      '<!doctype html><!-- Empty game -->',
+    ];
+    for (const source of fixtures) {
+      const bytes = new TextEncoder().encode(source);
+      const prepared = await relatedAssetHtml(bytes, lock);
+      expect(await relatedAssetHtml(prepared, lock)).toEqual(prepared);
+      const result = await page.evaluate(
+        ({ source, prepared }) => {
+          const read = (html: string) => {
+            // Discover without executing game scripts, as a backup client would.
+            const document = new DOMParser().parseFromString(html, 'text/html');
+            return {
+              mode: document.compatMode,
+              title: document.title,
+              lang: document.documentElement.lang,
+              body: document.body.textContent,
+              metadata:
+                document.head.querySelector('meta[name="game-data"]')?.getAttribute('content') ??
+                null,
+              links: [...document.head.querySelectorAll('link[rel="related"]')].map((link) =>
+                link.getAttribute('href'),
+              ),
+              allLinks: document.querySelectorAll('link[rel="related"]').length,
+            };
+          };
+          return { before: read(source), after: read(prepared) };
+        },
+        { source: new TextDecoder().decode(bytes), prepared: new TextDecoder().decode(prepared) },
+      );
+      const { links, allLinks, ...after } = result.after;
+      const { links: beforeLinks, allLinks: beforeAllLinks, ...before } = result.before;
+      expect(after, source).toEqual(before);
+      expect(links, source).toEqual([`blossom:${hash}.bin?sz=4`]);
+      expect(allLinks, source).toBe(1);
+    }
+  } finally {
+    await browser.close();
+  }
+});

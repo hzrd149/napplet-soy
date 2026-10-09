@@ -1,3 +1,4 @@
+import { importAsset } from '../../../packages/assets/src';
 import { afterAll, expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -245,4 +246,24 @@ test('publishing freezes editable upstream source and the separate built artifac
   );
   expect(frozen.fingerprint).toBe(inspected.fingerprint);
   expect(frozen.plan).toEqual(inspected.plan);
+});
+
+test('built publications prepare external related links without modifying editable or built source', async () => {
+  const project = await scaffold(root, 'related-built-project', 'boilerplate');
+  const asset = await importAsset(project, {
+    id: 'level-pack',
+    bytes: new Uint8Array([0, 1, 2, 255]),
+    storage: 'external',
+    license: 'MIT',
+  });
+  const html = '<!doctype html><html><head><title>Game</title></head><body>Game</body></html>';
+  await Bun.write(join(project, 'dist/index.html'), html);
+  const inspected = await inspectProject(project, 'local', 'a'.repeat(64));
+  const prepared = executableBytes(inspected.contents);
+  expect(new TextDecoder().decode(prepared)).toContain(`blossom:${asset.hash}.bin?sz=4`);
+  expect(inspected.plan.artifactHash).toBe(await sha256(prepared));
+  expect(inspected.plan.requires).toContain('resource');
+  expect(await Bun.file(join(project, 'dist/index.html')).text()).toBe(html);
+  const second = await inspectProject(project, 'local', 'a'.repeat(64));
+  expect(executableBytes(second.contents)).toEqual(prepared);
 });
