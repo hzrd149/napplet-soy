@@ -490,3 +490,49 @@ test('newest keeps the original publication date; recently updated uses the late
   expect(worker.store.firstPublishedAt(update)).toBe(100);
   expect(worker.store.firstPublishedAt(independent)).toBe(1);
 });
+
+test('website confirmation accepts a named-only release while still validating an explicitly requested snapshot', async () => {
+  const w = await setup(),
+    r = await release();
+  w.store.admit(r.current);
+  await hydrate(w, r.bytes);
+  w.store.setState('health', {
+    checkedAt: Date.now(),
+    release: 'test',
+    relays: w.config.relays,
+    errors: [],
+  });
+  const url = new URL('http://localhost/api/publications');
+  url.search = new URLSearchParams({ address: r.naddr, current: r.current.id }).toString();
+  const response = await publicationResponse(new Request(url));
+  expect(response.status).toBe(200);
+  const receipt = await response.clone().json();
+  expect(receipt).toMatchObject({ status: 'ready', snapshot: null });
+  const job = {
+    plan: {
+      pubkey: r.current.pubkey,
+      identifier: r.identity.identifier,
+      artifactHash: r.hash,
+      targets: { site: 'http://localhost' },
+    },
+    current: r.current,
+  };
+  expect(
+    await confirmWebsite(job, {
+      fetch: async (requested) => {
+        expect(requested.searchParams.has('snapshot')).toBe(false);
+        return response.clone();
+      },
+    }),
+  ).toMatchObject({ ready: true });
+  expect(
+    await confirmWebsite(job, {
+      fetch: async () =>
+        Response.json({ ...receipt, current: { ...r.current, content: 'forged' } }),
+    }),
+  ).toMatchObject({ ready: false });
+  url.searchParams.set('snapshot', r.snapshot.id);
+  expect((await (await publicationResponse(new Request(url))).json()).status).toBe('pending');
+  url.searchParams.set('snapshot', 'malformed');
+  expect((await publicationResponse(new Request(url))).status).toBe(400);
+});

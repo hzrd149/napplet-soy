@@ -1,21 +1,29 @@
 # Publishing a creation
 
-The CLI connects creator accounts, Git/GRASP, Blossom and NIP-5D publication, with a durable retry journal. The website's [persistent relay index](INDEXING.md) now confirms address and snapshot routes. A confirmed publication returns `indexed`, `websiteReady: true` and a check timestamp; a website that is unavailable or still catching up leaves the successful relay publication at `announced_pending_index`. Authors can claim named routes on the napplet page after signing in with the publishing identity.
+The CLI connects creator accounts, Git/GRASP, Blossom and NIP-5D publication, with a durable retry journal. The website's [persistent relay index](INDEXING.md) confirms the exact named revision and its artifact, plus the independent snapshot when explicitly requested. A confirmed publication returns `indexed`, `websiteReady: true` and a check timestamp; a website that is unavailable or still catching up leaves the successful relay publication at `announced_pending_index`. Authors can claim named routes on the napplet page after signing in with the publishing identity.
+
+Ordinary `soyli publish` updates the project's stable kind-35129 listing. Its
+address, social thread and source repository remain the same across revisions.
+Use `soyli publish --snapshot` when you also want an independent immutable
+kind-5129 publication. The returned `/r/<current-event-id>` link already pins an
+exact signed named revision without requiring that additional snapshot. Back up
+the journal and index: relays may prune replaced named events.
 
 ## Commands available from this checkout
 
 ```sh
 bun run soyli publish --project /path/to/my-experiment --network local --dry-run
 bun run soyli publish --project /path/to/my-experiment --network local
+bun run soyli publish --project /path/to/my-experiment --network local --snapshot
 bun run soyli status --project /path/to/my-experiment --network local
 bun run soyli publish --project /path/to/my-experiment --network local --resume
 ```
 
 Start the platform services with `bun run dev` or `bun run dev:prod`. Set up/select an account in the matching network profile. Install the sandbox-check browser once with `bunx playwright install chromium` in this checkout. Creators can also use the standalone `soyli` executable and public installer; see the [CLI guide](CLI.md).
 
-`--dry-run` prints the exact selected files, source size, creator, identifier, artifact hash and resolved service destinations. It does not open a signer, run code, contact a service, create a journal, or commit source; the one exception is a NIP-05 lookup to resolve the owner of a `nostr://` Git remote. It reports the `sourceRepository` that publication would use. It lists remote and browser checks still required. `status` reads the local journal only; it does not claim to observe the current remote state. `--json` writes one structured result to stdout; publication errors include `code`, `message`, `stage` and `retryable`.
+`--dry-run` prints the exact selected files, source size, creator, identifier, artifact hash, snapshot choice and resolved service destinations. It does not open a signer, run code, contact a service, create a journal, or commit source; the one exception is a NIP-05 lookup to resolve the owner of a `nostr://` Git remote. It reports the `sourceRepository` that publication would use. It lists remote and browser checks still required. `status` reads the local journal only; it does not claim to observe the current remote state. `--json` writes one structured result to stdout; publication errors include `code`, `message`, `stage` and `retryable`.
 
-An ordinary `publish` checks the current project. If a different unfinished release exists for the selected author, it stops and explains `--resume`. Explicit resume finishes that author's saved bytes and metadata even while the editor contains newer changes. Publish again afterward to release the newer revision. Pending releases belonging to other authors remain untouched and do not block this author. There is no implicit retargeting, discard, force-overwrite, or rollback command.
+An ordinary `publish` checks the current project. If a different unfinished release exists for the selected author, it stops and explains `--resume`. Explicit resume finishes that author's saved bytes and metadata even while the editor contains newer changes. Publish again afterward to release the newer revision. Pending releases belonging to other authors remain untouched and do not block this author. There is no implicit retargeting, discard, force-overwrite, or rollback command. The snapshot choice is frozen with the job. `--resume` preserves it; a pending named-only job cannot gain a snapshot. Finish that job, then publish with `--snapshot`. Older journals without a saved choice retain their original paired events and signatures on retry. An unchanged completed paired release can still repair those exact events; new ordinary revisions create no extra snapshot.
 
 ## Real Git history
 
@@ -179,11 +187,11 @@ not an independently reproducible-build attestation. Both tar and HTML are uploa
 
 1. Inspect the source and selected identity. Query the newest remote current manifest and Git announcement/state with an explicit completed relay query.
 2. Run the sandbox check; reject edits made during that check. Freeze the file set, commit and source archive.
-3. Persist the job, then signed Git authorization and snapshot/current events before sending any of them.
+3. Persist the job and snapshot choice, then signed Git authorization and current manifest (plus the explicitly requested snapshot) before sending any of them.
 4. Publish Git source and all retained release refs, using a lease on the main branch. Verify Git refs and signed source metadata.
 5. Check Blossom ownership and bytes. Reuse verified owned blobs; otherwise issue a scoped signed upload and independently verify retrieval.
-6. Publish the snapshot first, then the current manifest. Require each event to be queryable. A lost acknowledgement leaves the same signed event available for retry.
-7. Attempt optional mirrors, then check the website's exact current/snapshot projection and verified artifact. Save confirmed or pending website status without changing the signed publication.
+6. Publish the optional snapshot first, then the current manifest. Require every requested event to be queryable. A lost acknowledgement leaves the same signed event available for retry.
+7. Attempt optional mirrors, then check the website's exact current projection, any requested snapshot and verified artifact. Save confirmed or pending website status without changing the signed publication.
 
 Repeating the same release rechecks storage/relay evidence, repairs missing blobs/events and retries unavailable mirrors without creating another snapshot or source commit. `unchanged` means the release identity and bytes were reused, even if missing remote data needed repair. A change in source, title, topics or required domains creates a new release; identical HTML alone does not make metadata changes a no-op.
 
@@ -199,11 +207,16 @@ Checks before and after remote stages reject unknown competing current or source
 
 Source state retains at most 128 release refs in this initial adapter. Reaching that limit stops without deleting refs; a scalable retention policy is future work. Optional mirrors may be offline while primary publication succeeds. Stored receipts are observations, not promises of permanent hosting. Back up the journal and creator recovery material separately.
 
+The website confirmation endpoint accepts a current revision without a snapshot.
+Older paired CLI jobs retain the same exact-pair confirmation. Deploy the updated
+website/indexer to confirm named-only releases; an older endpoint leaves an
+otherwise successful relay publication at `announced_pending_index`.
+
 ## Protocol output
 
 Fresh publications use the selected [standalone NIP-5D draft at 4d0fb2e](https://github.com/dskvr/nips/blob/4d0fb2e9fa1fdca71be09b17a4c5f382fbca5d51/5D.md) and [NIP-34 Git URLs/state](https://github.com/nostr-protocol/nips/blob/master/34.md).
-Named current events remain kind 35129 with `d`; snapshots remain kind 5129 without
-`d`. Both carry one two-element `x` tag with the HTML SHA-256, nonempty plain-text
+Ordinary publication writes kind 35129 with stable `d`; `--snapshot` additionally
+writes kind 5129 without `d`. Both carry one two-element `x` tag with the HTML SHA-256, nonempty plain-text
 `content`, server hints, optional title/topics and the same advertised capabilities.
 There are no `path`, aggregate-marker, `description` or `requires` tags in new events.
 Snapshot `a`/`A` is optional immediate/root ancestry, never its own application

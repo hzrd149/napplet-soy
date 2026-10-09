@@ -77,7 +77,7 @@ test('real soyLI confirms unpublish, republishes unchanged source, and reports B
     await sourceGit(project, ['commit', '-m', 'Initial fixture']);
     const original = await cli(['account', 'create']);
     expect(original.code).toBe(0);
-    const published = await cli(['publish']);
+    const published = await cli(['publish', '--snapshot']);
     expect(published.code, JSON.stringify(published)).toBe(0);
     const journal = new Journal(project, 'local'),
       job = await journal.load((await journal.index()).latest!);
@@ -165,10 +165,11 @@ test('real soyLI confirms unpublish, republishes unchanged source, and reports B
     expect(restored.code, JSON.stringify(restored)).toBe(0);
     const restoredEvent = restored.data.receipt.events.listing;
     expect(restoredEvent.id).not.toBe(job.current!.id);
-    // Normal publish also adopts a shell-style fresh listing and builds a fresh snapshot.
+    // Ordinary publishing adopts the fresh listing without another independent snapshot.
     const fresh = await cli(['publish']);
     expect(fresh.code, JSON.stringify(fresh)).toBe(0);
-    expect(fresh.data.snapshotId).not.toBe(job.snapshot!.id);
+    expect(fresh.data.snapshotId).toBeNull();
+    expect(fresh.data.currentId).not.toBe(job.current!.id);
     const deletion = await cli(['delete', '--dry-run']);
     expect(deletion.code).toBe(0);
     expect(deletion.data.receipt.plan.repositories.length).toBe(1);

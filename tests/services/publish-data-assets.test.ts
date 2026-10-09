@@ -119,6 +119,7 @@ test('large sources and a 12 MiB game publish, resume data assets and retain his
     const sourceLink = await sourceGit(project, ['ls-tree', 'HEAD', 'CLAUDE.md']);
     expect(sourceLink).toStartWith('120000 blob');
     const options = {
+      snapshot: true, // Retain paired-publication upload/resume coverage.
       directory: project,
       network: 'local' as const,
       accounts,
@@ -352,6 +353,7 @@ test('legacy managed media resumes and remixes without rewriting the old publish
     await checkpoint(project, 'Legacy generated asset source', creator.pubkey);
     const commit = await sourceGit(project, ['rev-parse', 'HEAD']);
     const options = {
+      snapshot: true, // Retain paired-publication upload/resume coverage.
       directory: project,
       network: 'local' as const,
       accounts,

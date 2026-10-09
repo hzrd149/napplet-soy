@@ -31,7 +31,7 @@ New soyLI pinned links use `/r/<signed-current-event-id>` to preserve the named 
 
 Back up the index alongside other persistent service data. Relays can prune replaceable events: a new operator cannot reconstruct an unobserved older named event from a relay that discarded it. An exact signed-event link pins identity and content, not eternal data availability. Independent snapshot events remain ordinary relay-retainable immutable publications.
 
-A new current/snapshot pair may be coalesced in the gallery only when its signer, timestamp, artifact and every shared signed presentation/capability/source field agree and both manifests validate. This is presentation only. Direct snapshot URLs continue to work with independent scope. The index can compare archived named revisions; a browser that has not observed those revisions may show additional independently valid historical snapshots. An ancestry tag or matching artifact hash alone never establishes a pair.
+Exact current/snapshot pairs may be coalesced in the gallery only when their signer, timestamp, artifact and every shared signed presentation/capability/source field agree and both manifests validate. The index compares archived named revisions too. If an old named revision was never observed, a snapshot's release-specific signed kind-32267 descriptor can provide a display-only link to its author's live newer listing: exact `app` reference, same author/timestamp/title and one unambiguous `latest` address. Missing or invalid evidence leaves the snapshot independently discoverable. Matching ancestry, title or artifact alone is insufficient. Direct snapshot URLs retain their independent scope; descriptor-based grouping never authorizes deletion or grants parent permissions. Loading old named events does not resurrect old gallery cards.
 
 Lifecycle review separately enumerates exact signed pairs, including retained historical revisions, and shows their event IDs before author confirmation. The shared planner revalidates that inventory; saved receipts freeze it for retries. Unknown or near-matching snapshots remain independent. A bounded optional history endpoint supplies signed events, not deletion authority. See [the lifecycle contract](LIFECYCLE.md).
 
@@ -126,3 +126,13 @@ state, wrong authors and unverified bytes. Snapshot conversion is excluded becau
 standalone snapshots have a different independent identity. A fresh publication
 from an existing local project also recognizes an exact metadata-only migration
 of its saved previous manifest; arbitrary remote changes remain conflicts.
+
+## Stable publication defaults — 2026-10-09 source
+
+Ordinary `soyli publish` now updates only the stable named listing. `--snapshot`
+explicitly adds an independent immutable publication; `/r/<current-event-id>`
+still pins the named revision. The journal freezes this choice. Missing choice
+fields in older jobs preserve their original paired behavior and signatures,
+including interrupted releases. No historical event, source commit or identity
+is rewritten. These source changes require a matching CLI release and website
+rollout; the earlier deployment records above describe their original baseline.
