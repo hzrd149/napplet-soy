@@ -45,7 +45,7 @@ test('preserves unchanged self-contained HTML and creates a head when omitted', 
   expect(await relatedAssetHtml(source, lock(asset('a'.repeat(64), 'embedded')))).toEqual(source);
   const output = decode(await relatedAssetHtml(source, lock(asset('a'.repeat(64)))));
   expect(output).toStartWith('<!doctype html><head><link rel="related"');
-  expect(output).toContain('</head><title>Game</title>');
+  expect(output).toContain('<title>Game</title>');
   expect(decode(await relatedAssetHtml(encode(output), lock(asset('a'.repeat(64)))))).toBe(output);
 });
 
@@ -55,5 +55,22 @@ test('escapes attribute values and ignores head-like text inside scripts', async
     await relatedAssetHtml(encode(source), lock({ ...asset('a'.repeat(64)), mime: 'x/"<&>' })),
   );
   expect(output).toContain('type="x/&quot;&lt;&amp;&gt;"');
-  expect(output).toContain('<script>const text="</head>";</script><link');
+  expect(output).toContain('<script>const text="</head>";</script>');
+  expect(output.indexOf('data-soyli-related')).toBeLessThan(output.indexOf('<script>'));
+});
+
+test('related links remain before the body when the head end tag is omitted', async () => {
+  const source = '<!doctype html><html><head><title>Game</title><body>Play</body></html>';
+  const output = decode(await relatedAssetHtml(encode(source), lock(asset('a'.repeat(64)))));
+  expect(output.indexOf('data-soyli-related')).toBeLessThan(output.indexOf('<body>'));
+  expect(decode(await relatedAssetHtml(encode(output), lock(asset('a'.repeat(64)))))).toBe(output);
+});
+
+test('omitted heads preserve comments and the doctype ahead of generated markup', async () => {
+  const prefix = '<!-- Game license: MIT -->\n<!doctype html>\n<!-- Author -->';
+  const source = prefix + '<html lang="en"><title>Game</title><body>Play</body></html>';
+  const output = decode(await relatedAssetHtml(encode(source), lock(asset('a'.repeat(64)))));
+  expect(output).toStartWith(prefix + '<html lang="en">');
+  expect(output.indexOf('data-soyli-related')).toBeLessThan(output.indexOf('<title>'));
+  expect(decode(await relatedAssetHtml(encode(output), lock(asset('a'.repeat(64)))))).toBe(output);
 });

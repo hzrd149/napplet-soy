@@ -43,9 +43,12 @@ soyLI builds and prepares playable HTML with one `<link rel="related">` in its
 `<head>` for every distinct external asset hash in `napplet.assets.json`. For example:
 
 ```html
-<link rel="related" data-soyli-related
-      href="blossom:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.bin?sz=12345"
-      type="application/octet-stream">
+<link
+  rel="related"
+  data-soyli-related
+  href="blossom:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.bin?sz=12345"
+  type="application/octet-stream"
+/>
 ```
 
 These links follow [BUD-10 at `342cae9e`](https://github.com/hzrd149/blossom/blob/342cae9e5152c5214c83ca1f7f473c2eba0256f1/buds/10.md).
@@ -60,6 +63,8 @@ A runtime can parse these links from hash-verified HTML without executing game
 code or reading the soyLI inventory, then fetch and hash-verify each resource using
 the signed manifest's Blossom server hints. Generated links omit uploader/server
 hints so builds remain independent of publication account and destination.
+Preparation keeps declarations in the document head even when its end tag is
+omitted, preserves leading comments and doctypes, and leaves template/vector heads alone.
 Author-written related links are preserved. Rebuilds replace only links marked
 `data-soyli-related`; reserve that attribute for soyLI output.
 

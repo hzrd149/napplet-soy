@@ -23,6 +23,7 @@ export async function relatedAssetHtml(html: Uint8Array, lock: AssetLock) {
     })
     .join('');
   let head = false;
+  let headUnavailable = false;
   let removed = false;
   const response = new HTMLRewriter()
     .on('link[data-soyli-related]', {
@@ -31,10 +32,17 @@ export async function relatedAssetHtml(html: Uint8Array, lock: AssetLock) {
         element.remove();
       },
     })
+    .on('body, template, svg, math', {
+      element() {
+        headUnavailable = true;
+      },
+    })
     .on('head', {
       element(element) {
+        if (head || headUnavailable) return;
         head = true;
-        element.append(links, { html: true });
+        // append waits for a literal end tag; HTML may legally omit </head>.
+        element.prepend(links, { html: true });
       },
     })
     .transform(new Response(new Uint8Array(html)));
@@ -42,11 +50,30 @@ export async function relatedAssetHtml(html: Uint8Array, lock: AssetLock) {
   // Keep existing artifacts byte-for-byte when they need no metadata.
   if (!links && !removed) return new Uint8Array(html);
   if (head || !links) return output;
-  const text = new TextDecoder('utf-8', { fatal: true }).decode(output);
-  // HTML source can omit its head. Insert after the doctype so quirks mode is unchanged.
-  const doctype = /^\s*<!doctype[^>]*>/i.exec(text);
-  const offset = doctype?.[0].length ?? 0;
-  return new TextEncoder().encode(
-    `${text.slice(0, offset)}<head>${links}</head>${text.slice(offset)}`,
-  );
+  // Locate the first HTML token instead of guessing where a doctype ends.
+  // Leading comments/whitespace and quoted doctype identifiers stay untouched.
+  // Leave </head> implicit so existing title/meta/script tokens remain in the head.
+  const opening = `<head>${links}`;
+  let inserted = false;
+  const prepared = new HTMLRewriter()
+    .on('*', {
+      element(element) {
+        if (inserted) return;
+        if (element.tagName === 'html') element.prepend(opening, { html: true });
+        else element.before(opening, { html: true });
+        inserted = true;
+      },
+    })
+    .onDocument({
+      text(text) {
+        if (inserted || /^[\t\n\f\r \uFEFF]*$/.test(text.text)) return;
+        text.before(opening, { html: true });
+        inserted = true;
+      },
+      end(end) {
+        if (!inserted) end.append(opening, { html: true });
+      },
+    })
+    .transform(new Response(output));
+  return new Uint8Array(await prepared.arrayBuffer());
 }
