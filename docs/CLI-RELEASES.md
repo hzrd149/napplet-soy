@@ -3,6 +3,23 @@
 GitHub Releases distribute the standalone CLI independently of the website/VPS.
 The current published version is **0.25.2**.
 
+**0.25.3 prepared 2026-10-09 (Europe/Vienna); publication pending:**
+Includes [PR #8](https://github.com/zeSchlausKwab/napplet-soy/pull/8) and its
+HTML parser fixes. Builds and publication prepare deterministic BUD-10
+`<link rel="related">` declarations for each external managed asset hash. Clients
+can discover resources from verified HTML without running game code. Declarations
+stay in the document head, preserve rendering mode and author metadata, and are
+idempotent. Embedded assets and frozen publication retries retain their bytes.
+See [coverage and limits](ASSETS.md#related-resource-links--soyli-0253).
+
+Existing napplets remain playable. The NIP-5D/NAP-RESOURCE pins and runtime
+permissions are unchanged. No website or service deployment is required for this
+CLI release; offline saving and backup UI are separate work. The running website's
+installer remains pinned to 0.25.2 until the next website deployment. Existing
+installations can use `soyli update`; new installations can use the release's
+`install.sh` directly. Restart previews after upgrading. `soyli skills update`
+refreshes the asset guide in existing projects without rewriting their source.
+
 **0.25.2 published and deployed 2026-10-09 (Europe/Vienna):**
 [GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.25.2),
 source `2b5d4f72dbd4b1b9c999babb6f786679de6e5ea0`.

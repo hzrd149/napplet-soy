@@ -37,7 +37,7 @@ as a required capability. The inventory/helper are authoring conventions; playba
 on another host does not require parsing our lockfile or contacting napplet.soy.
 Use `releaseAssetUrls()` when a long-lived app no longer needs cached Blob URLs.
 
-### Related resource links — feature branch
+### Related resource links — soyLI 0.25.3
 
 soyLI builds and prepares playable HTML with one `<link rel="related">` in its
 `<head>` for every distinct external asset hash in `napplet.assets.json`. For example:
@@ -80,7 +80,8 @@ links. Dynamically discovered blobs, resources inside opaque packs, backend serv
 and mutable relay data are not automatically enumerated. Presentation covers/clips
 and source archives retain their separate signed metadata. Related links do not
 grant networking permissions or guarantee offline gameplay. Runtime offline saving
-and backup UI are separate work. This feature is not yet released or deployed.
+and backup UI are separate work. The declarations are prepared by soyLI 0.25.3;
+existing hosts do not need a deployment to accept them.
 
 ### Data packs, maps and other non-media assets
 

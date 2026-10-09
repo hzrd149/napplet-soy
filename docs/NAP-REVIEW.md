@@ -442,7 +442,7 @@ Its optional local preview and account binding do not affect other publishers'
 playback. An opt-in Linux deployment path is qualified separately; public activation and any CEP submission remain separate decisions. See
 [DYNAMIC-BACKENDS.md](DYNAMIC-BACKENDS.md) for the implementation boundary.
 
-## Related resource discovery — feature branch
+## Related resource discovery — soyLI 0.25.3
 
 Reviewed BUD-10 at `342cae9e5152c5214c83ca1f7f473c2eba0256f1` for
 `blossom:<sha256>.<ext>` with optional exact-size discovery metadata. soyLI's
@@ -450,4 +450,4 @@ prepared HTML declares external managed resources through `link rel="related"`;
 this is HTML association metadata, not a NAP operation or manifest extension.
 The existing NIP-5D and NAP-RESOURCE pins and `blossom:sha256:<hash>` playback
 calls remain unchanged. Missing related links never prevent playback or change
-publisher admission. See [coverage and limits](ASSETS.md#related-resource-links--feature-branch).
+publisher admission. See [coverage and limits](ASSETS.md#related-resource-links--soyli-0253).
