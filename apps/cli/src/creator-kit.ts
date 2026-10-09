@@ -148,6 +148,11 @@ and report missing coverage honestly. Never invent a portrait recording option.
 - soyli publish --dry-run inspects source and destinations;
   soyli publish requires a committed clean tree, builds dist/index.html projects,
   then checks the artifact and publishes. Preview/review opening never runs build scripts.
+  Ordinary publishing updates the same author-qualified listing and preserves its
+  social thread; it does not create a separate snapshot for every edit. Use
+  soyli publish --snapshot only when the creator requests an additional immutable
+  publication. Pinned /r/ links already select exact signed named revisions.
+  Keep the project identifier and selected account unless the user changes them.
 - For older single-file projects whose napplet.json entry is index.html, edit
   that file directly and use dev/check/publish; no build toolchain is required.
 

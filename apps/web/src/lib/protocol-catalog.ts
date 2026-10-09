@@ -30,7 +30,10 @@ import {
 } from '../../../../packages/protocol/src/topics';
 import { resolveManifestIcon } from '../../../../packages/client/src/manifest-icon';
 import { indexedPinnedManifest } from '../../../../packages/client/src/pinned-manifest';
-import { standalonePresentationKey } from '../../../../packages/protocol/src/presentation-pairs';
+import {
+  snapshotPresentationAddress,
+  standalonePresentationKey,
+} from '../../../../packages/protocol/src/presentation-pairs';
 import {
   latestProfile,
   profilePubkey,
@@ -43,10 +46,13 @@ import { protocolClient, network, manifestAllowed, blocked, featuredRules } from
 const entries = new Map<string, PublicNapplet>();
 const firstPublications = new Map<string, number>();
 // Retain bounded verified named presentation observations across replacements.
-// A browser only coalesces pairs it has actually observed; this grants no authority.
+// Exact pairs and verified author references affect display only, never authority.
 const presentationParents = new Map<string, SignedEvent>();
 const localDeletions = new Map<string, number>();
 function locallyRemoved(e: SignedEvent) {
+  const expiration = e.tags.find((tag) => tag[0] === 'expiration')?.[1];
+  if (expiration && /^\d+$/.test(expiration) && Number(expiration) <= Date.now() / 1000)
+    return true;
   const address = `${e.kind}:${e.pubkey}:${e.kind === 15129 ? '' : (e.tags.find((t) => t[0] === 'd')?.[1] ?? '')}`;
   return (
     (localDeletions.get(`${e.pubkey}:e:${e.id}`) ?? -1) >= e.created_at ||
@@ -97,7 +103,15 @@ export function seedCatalog(values: PublicNapplet[]) {
       Math.min(firstPublications.get(key) ?? Infinity, n.firstPublishedAt ?? n.manifest.created_at),
     );
     n.firstPublishedAt = firstPublications.get(key);
-    entries.set(n.revisionId, n);
+    let list = true;
+    if (n.manifest.kind !== 5129) {
+      for (const [id, known] of entries) {
+        if (catalogKey(known.manifest) !== catalogKey(n.manifest)) continue;
+        if (newest(known.manifest, n.manifest) < 0) list = false;
+        else if (id !== n.revisionId) entries.delete(id);
+      }
+    }
+    if (list) entries.set(n.revisionId, n);
     const presentation = n.manifest.kind !== 5129 && standalonePresentationKey(n.manifest);
     if (presentation) presentationParents.set(presentation, n.manifest);
     if (!availabilityCache.has(n.revisionId))
@@ -465,6 +479,19 @@ const manifestEntry = (n: PublicNapplet) => {
   const presentation = standalonePresentationKey(n.manifest);
   const parent = presentation && presentationParents.get(presentation);
   if (parent && manifestAllowed(parent) && !locallyRemoved(parent)) return false;
+  const presentationAddress = snapshotPresentationAddress(n.manifest, n.metadata);
+  if (
+    presentationAddress &&
+    [...entries.values()].some(
+      (entry) =>
+        entry.manifest.kind !== 5129 &&
+        catalogKey(entry.manifest) === presentationAddress &&
+        entry.manifest.created_at >= n.manifest.created_at &&
+        manifestAllowed(entry.manifest) &&
+        !locallyRemoved(entry.manifest),
+    )
+  )
+    return false;
   const address = legacySnapshotAddress(n.manifest);
   return (
     !address ||

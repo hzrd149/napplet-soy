@@ -149,6 +149,7 @@ async function fixture() {
     network: 'local',
     accounts,
     check: async () => ({ profile: 'test', browser: 'test' }),
+    snapshot: true, // These historical paired-publication cases opt into the extra copy.
     dependencies: deps,
   };
   const journal = new Journal(project, 'local');
@@ -1376,6 +1377,87 @@ test('a project with its own NIP-34 remote publishes against it without signing 
     await expect(publishCommitted(f.options)).rejects.toMatchObject({
       code: 'REPOSITORY_AMBIGUOUS',
     });
+  } finally {
+    await f.close();
+  }
+});
+
+test('ordinary publication and updates keep one named listing without creating independent snapshots', async () => {
+  const f = await fixture();
+  try {
+    const options = { ...f.options, snapshot: undefined };
+    const first = await publishProject(options);
+    const firstJob = await f.load();
+    expect(firstJob.snapshot).toBeUndefined();
+    expect(first).toMatchObject({ snapshotId: null, currentId: firstJob.current!.id });
+    expect('snapshotUrl' in first && first.snapshotUrl).toEndWith(`/r/${firstJob.current!.id}`);
+    await Bun.write(join(f.project, 'index.html'), '<!doctype html><title>Updated</title>Two');
+    const updated = await publishProject(options);
+    const next = await f.load();
+    expect(next.plan.identifier).toBe(firstJob.plan.identifier);
+    expect(next.current!.id).not.toBe(firstJob.current!.id);
+    expect(next.snapshot).toBeUndefined();
+    expect('snapshotId' in updated && updated.snapshotId).toBeNull();
+    expect([...f.events.values()].flat().filter((e) => e.kind === 5129)).toEqual([]);
+    expect(await publishProject(options)).toMatchObject({
+      unchanged: true,
+      currentId: next.current!.id,
+    });
+  } finally {
+    await f.close();
+  }
+});
+
+test('an explicit snapshot is frozen with its release and can be requested after a named-only publication', async () => {
+  const f = await fixture();
+  try {
+    await publishProject({ ...f.options, snapshot: undefined });
+    const first = await f.load();
+    const explicit = await publishProject({ ...f.options, snapshot: true });
+    const copy = await f.load();
+    expect(copy.current!.id).not.toBe(first.current!.id);
+    expect(copy.snapshot).toBeDefined();
+    await validateRelease(copy.current, copy.snapshot);
+    expect('snapshotId' in explicit && explicit.snapshotId).toBe(copy.snapshot!.id);
+    expect(await publishProject({ ...f.options, snapshot: true })).toMatchObject({
+      unchanged: true,
+    });
+  } finally {
+    await f.close();
+  }
+});
+
+test('resuming a frozen named-only release cannot add a snapshot and old paired jobs retain their saved intent', async () => {
+  const f = await fixture();
+  try {
+    f.deps.checkpoint = async () => {
+      throw new Error('stop before signing');
+    };
+    await expect(publishProject({ ...f.options, snapshot: undefined })).rejects.toThrow(
+      'stop before signing',
+    );
+    delete f.deps.checkpoint;
+    await expect(
+      publishProject({ ...f.options, snapshot: true, resume: true }),
+    ).rejects.toMatchObject({ code: 'PUBLISH_OPTIONS' });
+    await publishProject({ ...f.options, snapshot: undefined, resume: true });
+    expect((await f.load()).snapshot).toBeUndefined();
+    await Bun.write(
+      join(f.project, 'index.html'),
+      '<!doctype html><title>Old frozen release</title>Three',
+    );
+    f.deps.checkpoint = async () => {
+      throw new Error('old preparation');
+    };
+    await expect(publishProject(f.options)).rejects.toThrow('old preparation');
+    const old = await f.load();
+    delete old.snapshotMode; // Journals written by previous CLI versions always published a pair.
+    await f.journal.save(old);
+    delete f.deps.checkpoint;
+    await publishProject({ ...f.options, snapshot: undefined, resume: true });
+    const resumed = await f.load();
+    expect(resumed.id).toBe(old.id);
+    await validateRelease(resumed.current, resumed.snapshot);
   } finally {
     await f.close();
   }

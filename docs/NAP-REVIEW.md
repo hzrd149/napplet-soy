@@ -1,5 +1,16 @@
 # NAP concepts and expansion review
 
+## Stable publishing and historical gallery grouping — 2026-10-09 source
+
+Ordinary publication now writes the stable named listing; `publish --snapshot`
+explicitly adds an independent copy. Old frozen jobs retain their paired events.
+This changes a tooling default, not NIP-5D wire semantics or upstream pins.
+Gallery grouping can use an exact signed pair or the snapshot author's
+release-specific signed descriptor pointing to a live newer listing. Descriptor
+hints grant no lifecycle, social, storage or backend authority; independent
+snapshots and old links remain valid. See [publishing](PUBLISHING.md) and
+[migration semantics](NIP5D-MIGRATION.md). Release and deployment are separate.
+
 ## NIP-22 comment audit — 2026-10-05
 
 Reviewed the official [NIP-22 at 13664fb](https://github.com/nostr-protocol/nips/blob/13664fb18a3ce5fa48a849de012ab789d82eb254/22.md).

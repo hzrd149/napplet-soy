@@ -336,6 +336,11 @@ changes stay local until `propose`, `push`, or `publish`. Source archives reflec
 committed tree; built HTML and screenshots are separate Blossom artifacts.
 See [collaboration](COLLABORATION.md) for proposing, reviewing and merging.
 
+Ordinary `soyli publish` updates the stable listing. Use `soyli publish --snapshot`
+to also create an independent immutable publication. A pinned `/r/` link already
+selects the exact signed named revision. `--resume` preserves the frozen job's
+original choice, including older paired jobs. See [publishing](PUBLISHING.md).
+
 #### Your own NIP-34 repository
 
 If the project has a `nostr://` Git remote owned by the publishing account (for

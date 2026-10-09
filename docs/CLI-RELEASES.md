@@ -3,6 +3,28 @@
 GitHub Releases distribute the standalone CLI independently of the website/VPS.
 The current published version is **0.25.1**.
 
+**0.25.2 prepared 2026-10-09 (Europe/Vienna):**
+Ordinary `soyli publish` updates the stable named listing. Use
+`soyli publish --snapshot` when an additional independent immutable copy is wanted.
+Pending jobs retain their frozen choice; older paired jobs keep their exact events
+and resume behavior. No existing publication or Git history is rewritten.
+
+The gallery groups historical snapshots when an exact signed pair or the author's
+validated release descriptor points to a live newer listing. This grouping affects
+presentation only; pinned links, independent identities and their social, storage,
+backend and deletion boundaries remain intact. Named-only website confirmation
+checks the exact current revision and verified artifact. Hosts need the matching
+website/indexer update; a CLI release alone does not update a running host.
+
+After upgrading with `soyli update`, restart previews and use `soyli skills update`
+inside existing projects to refresh publishing guidance. No napplet migration,
+republish or bulk deletion is required to group the previously reported cards.
+Local verification passes TypeScript, 590 source tests (4,725 assertions), the
+production build, captured signed-event replay, and eight real-service cases,
+including publication/resume, collaboration, linked source, large assets,
+production-browser pinned playback, historical grouping and deletion isolation.
+Release CI, Linux Nix/VM validation and deployment are pending.
+
 **0.25.1 published and deployed 2026-10-07 (Europe/Vienna):**
 [GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.25.1),
 source `fed5a41f0de19aa01afb0e329ca86401c3cb77cf`.

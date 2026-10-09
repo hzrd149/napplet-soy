@@ -71,6 +71,8 @@ export const jobSchema = z
     version: z.literal(1),
     id: hash,
     fingerprint: hash,
+    // Absent in older journals: preserve their automatically paired publication.
+    snapshotMode: z.enum(['none', 'explicit']).optional(),
     plan: planSchema,
     createdAt: z.number().int().nonnegative(),
     parent: hash.nullable(),
@@ -175,18 +177,24 @@ export const jobSchema = z
   })
   .strict()
   .refine(
+    (job) => job.snapshotMode !== 'none' || (!job.snapshot && !job.receipts.snapshot),
+    'Named-only jobs cannot contain a snapshot or snapshot acknowledgement',
+  )
+  .refine(
     (job) =>
       job.status !== 'announced_pending_index' ||
       ((!job.plan.icon || job.receipts.icon === true) &&
         (!job.video || (!!job.preview && job.receipts.video === true)) &&
         (!!job.source || !!job.repository) &&
         !!job.current &&
-        !!job.snapshot &&
+        (job.snapshotMode === 'none' || !!job.snapshot) &&
         (!job.preview ||
           (!!job.preview.descriptor &&
             job.receipts.preview === true &&
             job.receipts.descriptor === true)) &&
-        Object.values(job.receipts).every(Boolean)),
+        Object.entries(job.receipts).every(([kind, accepted]) =>
+          kind === 'snapshot' && job.snapshotMode === 'none' ? !accepted : accepted,
+        )),
     'Completed jobs require all publication evidence',
   );
 export type PublishJob = z.infer<typeof jobSchema>;

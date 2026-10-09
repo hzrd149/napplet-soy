@@ -273,6 +273,15 @@ as napplet zaps. Payment still requires an explicit wallet action.
 
 ## Gallery and Featured
 
+Ordinary soyLI publication updates one stable listing. Additional immutable
+snapshots are explicit (`publish --snapshot`). The gallery groups verified exact
+publication pairs, including retained old revisions, and historical snapshots
+whose own release-specific signed descriptor unambiguously points to their
+same author's live newer listing. Missing or invalid evidence leaves a snapshot
+independent. Grouping is display only: direct snapshot links, independent social
+threads and storage remain separate. An old named revision opened through `/r/`
+does not become another current gallery card.
+
 The homepage reads the standard relay/index collection. **Newest** sorts by the
 first signed publication observed for each identity; **Recently updated** sorts by
 the latest manifest timestamp. The persistent index recovers original dates from
