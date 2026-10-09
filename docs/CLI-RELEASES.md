@@ -1,9 +1,20 @@
 # soyLI releases and updates
 
 GitHub Releases distribute the standalone CLI independently of the website/VPS.
-The current published version is **0.25.2**.
+The current published version is **0.25.3**.
 
-**0.25.3 prepared 2026-10-09 (Europe/Vienna); publication pending:**
+**0.25.3 published 2026-10-09 (Europe/Vienna); no host deployment:**
+[GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.25.3),
+source `4fa807dd999b7b8eb5050a1e0dc173bd16403628`.
+[Release CI 37920572316](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37920572316)
+passed TypeScript, 596 source tests (4,762 assertions), four native packages and
+publication of all 11 assets.
+[Nix CI 37920564336](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37920564336)
+passed realization, forced rebuild and offline NixOS VM checks. Public archive
+checksums, aggregate checksums, installer bytes and tagged-source manifest match.
+An isolated public macOS ARM64 installation reports current through `doctor` and
+`update`; a real 0.25.2 → 0.25.3 upgrade preserves account/project markers.
+
 Includes [PR #8](https://github.com/zeSchlausKwab/napplet-soy/pull/8) and its
 HTML parser fixes. Builds and publication prepare deterministic BUD-10
 `<link rel="related">` declarations for each external managed asset hash. Clients
