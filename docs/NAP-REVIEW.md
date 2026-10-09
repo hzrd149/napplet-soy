@@ -9,7 +9,10 @@ Gallery grouping can use an exact signed pair or the snapshot author's
 release-specific signed descriptor pointing to a live newer listing. Descriptor
 hints grant no lifecycle, social, storage or backend authority; independent
 snapshots and old links remain valid. See [publishing](PUBLISHING.md) and
-[migration semantics](NIP5D-MIGRATION.md). Release and deployment are separate.
+[migration semantics](NIP5D-MIGRATION.md). Released as soyLI 0.25.2 and deployed
+in `20261009091435416-91120` on 2026-10-09; source/native/Nix, target service
+checks and live desktop/mobile gallery plus exact historical-byte checks pass.
+See [release evidence](CLI-RELEASES.md).
 
 ## NIP-22 comment audit — 2026-10-05
 
