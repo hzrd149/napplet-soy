@@ -111,6 +111,18 @@ required authoring metadata. [WASM guidance](WASM.md) and the
 [compatibility record](COMPATIBILITY.md) distinguish working specimens from engine-wide
 or independent-client conformance.
 
+2026-10-10 gamepad isolation (unreleased source after 0.25.1): native Gamepad reads
+were found to be available to every opaque player frame. CSP has no gamepad directive,
+and Chromium grants the `gamepad` feature to all frames by default. Napplets placed
+side by side therefore all received the same controller input. Player frames now
+deny it in `PLAYER_ALLOW`, along with `browsing-topics`, `interest-cohort`,
+`private-state-token-*`, `storage-access` and `deferred-fetch-minimal`. The shell
+brokers focus-scoped snapshots through the local [NAP-GAMEPAD draft](NAP-GAMEPAD.md)
+and adds `gamepad` to the advertised domains. A prelude shim keeps the standard API
+working for unmodified games. No upstream NAP exists. The shim, SDK and NIP-5D pins
+are unchanged. This supersedes the next paragraph's "no NAP domain" statement. Not
+deployed.
+
 2026-09-20 controller slice (0.16.0 source): native browser Gamepad input is
 available inside the existing sandbox on tested Chromium. The workshop tester
 and bundled creator helper add no NAP domain, shim/SDK change, new device grant
@@ -170,7 +182,7 @@ return creation errors. See [MEDIA.md](MEDIA.md) for remaining modes and verific
 
 The [runtime domain registry](../packages/runtime/src/capabilities.ts) advertises
 `shell`, `identity`, `storage`, `theme`, `resource`, `relay`, `outbox`, `common`,
-`link`, `fs` and, in the new source milestone, `config`. Several write operations are denied by current policy; domain
+`link`, `fs`, `config` and, in unreleased source, the local `gamepad` draft. Several write operations are denied by current policy; domain
 presence is not permission for every operation. The upstream
 [shim integration](../packages/runtime/src/prelude.ts) and
 [host dispatcher](../packages/runtime/src/host.ts) are shared by web and CLI previews.

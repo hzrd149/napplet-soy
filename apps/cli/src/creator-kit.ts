@@ -131,7 +131,8 @@ and report missing coverage honestly. Never invent a portrait recording option.
   docs/examples/gamepad.ts. The Controller tester in soyli dev checks buttons,
   axes, dead zones and test mappings inside the real sandbox. Wire named actions
   into your game; retain keyboard/touch input and handle disconnect/focus/pause.
-  Use the native Gamepad API, not SERIAL or an invented gamepad NAP requirement.
+  Use the standard Gamepad API; the runtime brokers it to the focused napplet.
+  Do not add SERIAL or a gamepad requires entry.
   Test actual controllers as well as synthetic input; soyli check is not a hardware test.
 - soyli screenshot saves preview.png and selects it in napplet.json.
   Inspect the image: it should show a representative app state, not a blank canvas

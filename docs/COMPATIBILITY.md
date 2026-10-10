@@ -89,6 +89,15 @@ browsers/operating systems. The final ARM64 executable passed its preview/captur
 smoke test and includes the guide/helper; other platform archives are build-only.
 See [controller behavior and remaining checks](CONTROLLERS.md). Not deployed.
 
+Unreleased source after 0.25.1 denies native Gamepad access to player frames
+(`gamepad 'none'` in `PLAYER_ALLOW`). The shell brokers input through the local
+[NAP-GAMEPAD draft](NAP-GAMEPAD.md), and a prelude shim keeps the standard API working
+for unmodified games. `gamepad` is now advertised in the runtime's domain list. It is
+not an upstream NAP and changes no shim, SDK or NIP-5D pin. Native policy denial,
+focus isolation between side-by-side frames and the shim's API fidelity are tested
+in Chromium. Physical controllers, Safari and Firefox are unverified. Not released or
+deployed.
+
 A13/A21 local update (2026-09-15): profile metadata and ancestry were checked against
 NIP-01, NIP-24 and NIP-5A at
 [`a2494f4f81d46684e5814a9bf35e2b1df978f955`](https://github.com/nostr-protocol/nips/tree/a2494f4f81d46684e5814a9bf35e2b1df978f955).

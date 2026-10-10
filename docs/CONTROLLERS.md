@@ -4,16 +4,25 @@ soyLI 0.16.0 adds a **Controller tester** in the `soyli dev` workshop and a
 dependency-free input helper for creators. These are local source changes until
 the release is published. Ordinary USB/Bluetooth gamepads use the browser's
 [Gamepad API](https://www.w3.org/TR/gamepad/), not NAP-SERIAL. No server, CVM,
-account, new NAP domain or `requires` entry is needed. No shim/SDK/protocol pin
-changes are involved. Existing games must explicitly wire their actions to input.
+account or `requires` entry is needed. Existing games must explicitly wire their
+actions to input.
+
+**Isolation (unreleased source after 0.25.1).** Player frames can no longer read
+controllers directly. The runtime page is the only native reader, and it passes input
+only to the napplet that has focus (local [NAP-GAMEPAD draft](NAP-GAMEPAD.md)). A shim
+injected before your code keeps `navigator.getGamepads()` and the
+`gamepadconnected`/`gamepaddisconnected` events working, so existing games and this
+helper need no changes. Click a napplet to give it the controllers. Input arrives
+about one frame later than native input, there is no rumble (`vibrationActuator` is
+`null`), and connection events are untrusted `GamepadEvent`s.
 
 ## Try a controller
 
 Pair it in the operating system's settings or plug in a data-capable USB cable.
 Run `soyli dev`, expand **Controller tester**, click inside the panel, then press
 a controller button. Some browsers withhold devices until that gesture. The
-tester runs in the same opaque `allow-scripts` sandbox with the same CSP as a
-napplet. It displays slots, raw buttons/axes and mapping, and a small movement,
+tester runs in the same opaque `allow-scripts` sandbox, with the same CSP,
+Permissions-Policy and gamepad broker as a napplet. It displays slots, raw buttons/axes and mapping, and a small movement,
 jump/fire and pause experiment. Keyboard focus must be inside it for active input.
 Close it to destroy the test session; click your napplet to return input to it.
 
@@ -109,7 +118,9 @@ localStorage. Never assume Xbox/PlayStation lettering has identical names.
 - Test in both the workshop's actual napplet frame and the deployed shell. Confirm
   physical USB and Bluetooth operation on intended browsers. Record which devices
   were tested; synthetic snapshots and `soyli check` are not hardware certification.
-- Do not add `requires: ['gamepad']`, `serial` or an invented `napplet.gamepad` API.
-  Browser policy may restrict native Gamepad input; keep useful fallback controls.
+- Do not add `requires: ['gamepad']` or `serial`. Prefer the standard
+  `navigator.getGamepads()` API. `window.napplet.gamepad` exists only in runtimes
+  that implement the local draft. Runtimes or browser policy may withhold controller
+  input, so keep useful fallback controls.
   No WebHID, WebUSB, serial-port support, rumble or controller-driven shell navigation
   is promised by this slice. Feature-detected haptics are a possible later addition.

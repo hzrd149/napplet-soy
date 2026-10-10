@@ -221,11 +221,14 @@ through relays, without publishing synthetic receipts or introducing a site API.
 4. Scope each inbound message to the registered iframe `Window`, full app address, release, and current session. Reject malformed/oversized payloads and unknown senders; silently ignore unknown message types as the pinned protocol requires. Bound pending operations and message rates.
 5. Remove bindings, subscriptions, object URLs, audio, and pending work when the player closes or navigates. A changed document must not inherit an old session's privileges.
 
-Browser-native input is distinct from host-mediated NAP domains. The existing
-sandbox permits Gamepad API reads on tested Chromium, subject to browser exposure
-and Permissions-Policy. soyLI's optional [controller helper and tester](CONTROLLERS.md)
-use this directly; they add no SERIAL/device grant, signing authority or new NAP
-requirement. Games must handle input focus and retain usable fallback controls.
+CSP cannot govern device APIs such as the Gamepad API; Permissions-Policy can.
+Player frames use `PLAYER_ALLOW`, which denies `gamepad` along with default-granted
+ad, attribution and cross-site storage features. The shell owns the only native
+controller reader and forwards focus-scoped snapshots through the local
+[NAP-GAMEPAD draft](NAP-GAMEPAD.md). A prelude shim serves the standard
+`navigator.getGamepads()` API from those snapshots, so napplets running side by side
+cannot read each other's input. This adds no SERIAL/device grant, signing authority
+or `requires` entry. Games must keep usable fallback controls.
 
 Sandboxing alone does not block network requests. Use the pinned proposal's restrictive CSP, including `connect-src 'none'`, no external scripts, no child frames, and no workers initially. For media creations allow only embedded `data:`/`blob:` audio/image sources; permit WebAssembly byte compilation only if the chosen profile needs it. Do not enable JavaScript `unsafe-eval` as a shortcut. Host-page response headers must enforce controls such as `frame-ancestors` that a CSP meta element cannot enforce. See [CSP Level 3](https://www.w3.org/TR/CSP3/).
 
