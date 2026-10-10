@@ -1,8 +1,8 @@
 # NAP-GAMEPAD — shell-brokered controller input (local draft)
 
-Status: **local draft proposal**, implemented in unreleased source after soyLI 0.25.1.
-It is not an upstream NAP. Pinned shim 0.30.0 and the
-[NAP registry](https://github.com/napplet/naps) define no gamepad domain, so this host
+Status: **local draft**, implemented in unreleased source after soyLI 0.25.3 and
+proposed upstream as [napplet/naps#108](https://github.com/napplet/naps/pull/108) (open draft, not merged). Pinned shim 0.30.0 and the
+[NAP registry](https://github.com/napplet/naps) define no gamepad domain yet, so this host
 adds one through its own prelude, as it does for NAP-SHELL. Nothing here changes
 NIP-5D kinds, manifests or `requires` semantics. Not deployed.
 

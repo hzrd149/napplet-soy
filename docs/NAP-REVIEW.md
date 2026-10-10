@@ -111,7 +111,7 @@ required authoring metadata. [WASM guidance](WASM.md) and the
 [compatibility record](COMPATIBILITY.md) distinguish working specimens from engine-wide
 or independent-client conformance.
 
-2026-10-10 gamepad isolation (unreleased source after 0.25.1): native Gamepad reads
+2026-10-10 gamepad isolation (unreleased source after 0.25.3): native Gamepad reads
 were found to be available to every opaque player frame. CSP has no gamepad directive,
 and Chromium grants the `gamepad` feature to all frames by default. Napplets placed
 side by side therefore all received the same controller input. Player frames now
@@ -119,7 +119,7 @@ deny it in `PLAYER_ALLOW`, along with `browsing-topics`, `interest-cohort`,
 `private-state-token-*`, `storage-access` and `deferred-fetch-minimal`. The shell
 brokers focus-scoped snapshots through the local [NAP-GAMEPAD draft](NAP-GAMEPAD.md)
 and adds `gamepad` to the advertised domains. A prelude shim keeps the standard API
-working for unmodified games. No upstream NAP exists. The shim, SDK and NIP-5D pins
+working for unmodified games. It is proposed upstream as [napplet/naps#108](https://github.com/napplet/naps/pull/108), an open draft. The shim, SDK and NIP-5D pins
 are unchanged. This supersedes the next paragraph's "no NAP domain" statement. Not
 deployed.
 

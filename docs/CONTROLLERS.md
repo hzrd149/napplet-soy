@@ -7,7 +7,7 @@ the release is published. Ordinary USB/Bluetooth gamepads use the browser's
 account or `requires` entry is needed. Existing games must explicitly wire their
 actions to input.
 
-**Isolation (unreleased source after 0.25.1).** Player frames can no longer read
+**Isolation (unreleased source after 0.25.3).** Player frames can no longer read
 controllers directly. The runtime page is the only native reader, and it passes input
 only to the napplet that has focus (local [NAP-GAMEPAD draft](NAP-GAMEPAD.md)). A shim
 injected before your code keeps `navigator.getGamepads()` and the
