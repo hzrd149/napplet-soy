@@ -246,3 +246,33 @@ test('real relay cancellation stops the optional phase and prevents later events
     await server.stop(true);
   }
 });
+
+test('cancelling a required relay acknowledgement preserves the actionable publication-cancelled cause', async () => {
+  const controller = new AbortController();
+  const server = Bun.serve({
+    port: 0,
+    hostname: '127.0.0.1',
+    fetch(request, server) {
+      if (server.upgrade(request)) return;
+      return new Response('upgrade', { status: 400 });
+    },
+    websocket: {
+      message(ws, data) {
+        const message = JSON.parse(String(data));
+        if (message[0] === 'REQ') ws.send(JSON.stringify(['EOSE', message[1]]));
+        else if (message[0] === 'EVENT') controller.abort();
+      },
+    },
+  });
+  const relays = new PublicationRelays(controller.signal);
+  try {
+    await expect(relays.ensure(`ws://127.0.0.1:${server.port}/`, events[0])).rejects.toMatchObject({
+      code: 'PUBLISH_CANCELLED',
+      stage: 'relay',
+      retryable: true,
+    });
+  } finally {
+    relays.close();
+    await server.stop(true);
+  }
+});

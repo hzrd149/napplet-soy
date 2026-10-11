@@ -93,7 +93,11 @@ export class PublicationRelays {
         .relay(url)
         .event(event)
         .pipe(timeout(8000), takeUntil(this.signal ? fromEvent(this.signal, 'abort') : NEVER)),
-    );
+    ).catch((cause) => {
+      if (this.signal?.aborted)
+        throw new PublishError('PUBLISH_CANCELLED', 'Publication cancelled.', 'relay', true, cause);
+      throw cause;
+    });
     this.signal?.throwIfAborted();
     if (!result.ok)
       throw new PublishError(
