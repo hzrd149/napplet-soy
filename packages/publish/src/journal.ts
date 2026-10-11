@@ -8,28 +8,14 @@ import { eventSchema } from '../../protocol/src';
 import { remixSchema } from '../../protocol/src/remix';
 import type { Network } from '../../identity/src/signer';
 import { PublishError, targetsSchema, intentSchema } from './config';
-import { MAX_SOURCE_FILES, MAX_PUBLICATION_JOURNAL_BYTES, MAX_OUTBOX_RELAYS } from './limits';
+import { MAX_SOURCE_FILES, MAX_PUBLICATION_JOURNAL_BYTES } from './limits';
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
-const diagnosticSchema = z
-  .object({
-    code: z.string().max(80),
-    message: z.string().max(2000),
-    operation: z.string().max(160),
-    recovery: z.string().max(2000),
-    details: z.array(z.string().max(2000)).max(8).optional(),
-    stage: z.string().max(40).optional(),
-    retryable: z.boolean(),
-  })
-  .strict();
-const copyError = z
-  .object({
-    eventId: hash,
-    eventKind: z.number().int().nonnegative(),
-    attemptedAt: z.number().int().nonnegative(),
-    diagnostic: diagnosticSchema,
-  })
-  .strict();
+import {
+  copyErrorSchema as copyError,
+  outboxSchema,
+  copyHistorySchema,
+} from '../../nostr/src/publication-copies';
 const commit = z.string().regex(/^[a-f0-9]{40}$/);
 const planSchema = z
   .object({
@@ -155,19 +141,9 @@ export const jobSchema = z
     mirrors: z.record(z.string(), z.boolean()),
     mirrorErrors: z.record(z.string(), copyError).optional(),
     // Recomputed on each publish run from the creator's current NIP-65 relay list.
-    outbox: z
-      .object({
-        checkedAt: z.number().int().nonnegative(),
-        source: z.enum(['nip65', 'none', 'unavailable']),
-        eventId: hash.optional(),
-        relays: z.array(z.string().max(256)).max(MAX_OUTBOX_RELAYS),
-        ignored: z.number().int().nonnegative(),
-        lookupError: diagnosticSchema.optional(),
-        copies: z.record(z.string(), z.boolean()),
-        errors: z.record(z.string(), copyError),
-      })
-      .strict()
-      .optional(),
+    outbox: outboxSchema.optional(),
+    // Cumulative attempted destinations, including partial failures and retired write relays.
+    outboxHistory: copyHistorySchema.optional(),
     status: z.enum(['prepared', 'announced_pending_index']),
     website: z
       .object({

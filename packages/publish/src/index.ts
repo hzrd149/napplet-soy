@@ -28,7 +28,7 @@ import {
   type PublishPlan,
 } from './project';
 import { PublicationRelays } from './relay';
-import { resolveOutbox } from './outbox';
+import { copyPublication } from '../../nostr/src/publication-copies';
 import { ownedBlobs, verifiedBlob } from './blobs';
 import { confirmWebsite } from './website';
 import { executableBytes } from './artifact';
@@ -984,91 +984,35 @@ export async function publishProject(options: PublishOptions) {
         job.receipts.current = true;
         await save();
         await guard();
-        // Copies are best effort: a failure is recorded without undoing the primary release.
-        const copy = async (url: string, operation: string, recovery: string) => {
-          let event = currentJob.preview?.descriptor ?? currentJob.snapshot ?? currentJob.current!;
-          try {
-            for (const next of [
-              currentJob.preview?.descriptor,
-              currentJob.snapshot,
-              currentJob.current,
-            ]) {
-              if (!next) continue;
-              event = next;
-              await relays.ensure(url, event);
-            }
-            return null;
-          } catch (cause) {
-            const diagnostic = diagnose(cause, operation);
-            return {
-              eventId: event.id,
-              eventKind: event.kind,
-              attemptedAt: Date.now(),
-              diagnostic: {
-                ...diagnostic,
-                retryable: diagnostic.retryable ?? true,
-                recovery,
-              },
-            };
-          }
-        };
-        for (const mirror of job.plan.targets.mirrors) {
-          progress('mirror');
-          const failure = await copy(
-            mirror,
-            'publish optional mirror',
-            'The primary publication is unaffected. With unchanged source, rerun soyli publish to repair copies of the same signed release. Edit future mirrors in soyli dev (Where it goes).',
-          );
-          job.mirrors[mirror] = !failure;
-          if (failure) {
-            job.mirrorErrors ??= {};
-            job.mirrorErrors[mirror] = failure;
-          } else if (job.mirrorErrors) delete job.mirrorErrors[mirror];
-          await save();
-        }
-        if (relays.read) {
-          // The creator's own NIP-65 write relays let outbox clients find the release.
-          progress('outbox');
-          const lookup = await resolveOutbox(
-            relays.read.bind(relays),
-            account.pubkey,
-            job.plan.targets,
-            options.network,
-          );
-          const outbox: NonNullable<PublishJob['outbox']> = {
-            checkedAt: Date.now(),
-            source: lookup.source,
-            ...(lookup.eventId ? { eventId: lookup.eventId } : {}),
-            relays: lookup.relays,
-            ignored: lookup.ignored,
-            ...(lookup.error
-              ? {
-                  lookupError: {
-                    ...lookup.error,
-                    retryable: lookup.error.retryable ?? true,
-                  },
-                }
-              : {}),
-            copies: {},
-            errors: {},
-          };
-          for (const url of lookup.relays) {
-            progress('outbox');
-            const failure = await copy(
-              url,
-              'publish to creator outbox relay',
-              'The primary publication is unaffected. With unchanged source, rerun soyli publish to retry; each run reads your current NIP-65 relay list.',
-            );
-            outbox.copies[url] = !failure;
-            if (failure) outbox.errors[url] = failure;
-          }
-          job.outbox = outbox;
-          await save();
-        }
+        // The primary release is complete even if optional copies stall or are interrupted.
         job.status = 'announced_pending_index';
         delete job.error;
         await save();
         await journal.select(null, job.id);
+        await copyPublication({
+          pubkey: account.pubkey,
+          targets: job.plan.targets,
+          network: options.network,
+          events: [job.preview?.descriptor, job.snapshot, job.current].filter(
+            (e): e is SignedEvent => !!e,
+          ),
+          state: job,
+          save,
+          signal: options.signal,
+          progress: (next) => {
+            stage = next;
+            options.progress?.(next);
+          },
+          io: (signal) =>
+            deps.relays
+              ? {
+                  read: relays.read?.bind(relays) ?? (async () => []),
+                  ensure: relays.ensure.bind(relays),
+                  close() {},
+                }
+              : new PublicationRelays(signal),
+        });
+        if (options.signal?.aborted) return result(job, completed);
         progress('website');
         job.website = await (deps.website ?? confirmWebsite)(job, { signal: options.signal });
         await save();

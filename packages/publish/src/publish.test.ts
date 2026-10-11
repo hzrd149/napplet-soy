@@ -1,3 +1,11 @@
+import { publicationDestinations } from '../../nostr/src/publication-copies';
+import {
+  planLifecycle,
+  createLifecycleReceipt,
+  executeLifecycle,
+  lifecycleFinished,
+  parseReceipt,
+} from '../../lifecycle/src';
 import { migrationTemplate } from '../../migration/src';
 import { descriptorVideos } from '../../protocol/src/preview-video';
 import { importAsset, readAssets, validateAssets } from '../../assets/src';
@@ -1609,6 +1617,156 @@ test('resuming a frozen named-only release cannot add a snapshot and old paired 
     const resumed = await f.load();
     expect(resumed.id).toBe(old.id);
     await validateRelease(resumed.current, resumed.snapshot);
+  } finally {
+    await f.close();
+  }
+});
+
+test('overlong canonical outbox destinations are skipped before network writes and CLI status stays completed', async () => {
+  const f = await fixture();
+  try {
+    const long = 'ws://127.0.0.1/' + 'a'.repeat(300),
+      expanded = 'ws://127.0.0.1/' + '界'.repeat(30);
+    const primary = 'ws://127.0.0.1:19347/relay';
+    f.record(
+      primary,
+      await relayList(f, [
+        ['r', long],
+        ['r', expanded],
+      ]),
+    );
+    f.deps.relays!.read = async (url, filter) =>
+      (f.events.get(url) ?? []).filter((e) => matchFilter(filter, e));
+    await publishProject(f.options);
+    const job = await f.load();
+    expect(job.status).toBe('announced_pending_index');
+    expect((await f.journal.index()).active).toBeNull();
+    expect(job.outbox).toMatchObject({ ignored: 2, relays: [] });
+    expect(f.events.has(long)).toBe(false);
+    expect(f.events.has(new URL(expanded).href)).toBe(false);
+    const [code, output, error] = await cliStatus(f.project, false);
+    expect(code, output + error).toBe(0);
+    expect(output).toContain('Skipped 2 listed write relays');
+    expect(output).toContain('256-character canonical URL bound');
+  } finally {
+    await f.close();
+  }
+});
+
+test('completed primary is durable before optional lookup and lifecycle removes retired and partial copies beyond eight relays', async () => {
+  const f = await fixture();
+  try {
+    const primary = 'ws://127.0.0.1:19347/relay';
+    const mirrors = Array.from({ length: 7 }, (_, i) => `ws://127.0.0.1:${5000 + i}/`);
+    const outbox = Array.from({ length: 8 }, (_, i) => `ws://127.0.0.1:${6000 + i}/`);
+    f.options.targets = { mirrors };
+    f.record(
+      primary,
+      await relayList(
+        f,
+        outbox.map((url) => ['r', url]),
+      ),
+    );
+    f.deps.relays!.read = async (url, filter) => {
+      if (filter.kinds?.includes(10002)) {
+        const job = await f.load();
+        expect(job.status).toBe('announced_pending_index');
+        expect((await f.journal.index()).active).toBeNull();
+      }
+      return (f.events.get(url) ?? []).filter((e) => matchFilter(filter, e));
+    };
+    const ensure = f.deps.relays!.ensure;
+    f.deps.relays!.ensure = async (url, event) => {
+      if (url === outbox[0] && event.kind === 35129)
+        throw new Error('fixture current refused after snapshot accepted');
+      await ensure(url, event);
+    };
+    await publishProject(f.options);
+    const first = await f.load();
+    expect(f.events.get(outbox[0])!.map((e) => e.kind)).toEqual([5129]);
+    // Remove the old list so selection unambiguously follows the creator's replacement.
+    f.events.set(
+      primary,
+      f.events.get(primary)!.filter((e) => e.kind !== 10002),
+    );
+    f.record(primary, await relayList(f, [['r', outbox[7]]]));
+    await publishProject(f.options);
+    const job = await f.load();
+    expect(job.outbox!.relays).toEqual([outbox[7]]);
+    expect(job.outboxHistory).toEqual(outbox);
+    const relayKey = (url: string) =>
+      [...f.events.keys()].find((key) => key.replace(/\/$/, '') === url.replace(/\/$/, '')) ?? url;
+    const io = {
+      read: async (url: string, filter: any) =>
+        (f.events.get(relayKey(url)) ?? []).filter((e) => matchFilter(filter, e)),
+      publish: async (url: string, deletion: SignedEvent) => {
+        expect(deletion.kind).toBe(5);
+        const target = relayKey(url);
+        f.events.set(
+          target,
+          (f.events.get(target) ?? []).filter(
+            (e) => !deletion.tags.some((t) => t[0] === 'e' && t[1] === e.id),
+          ),
+        );
+        f.record(target, deletion);
+      },
+      fetch: async () => {
+        throw new Error('unpublish must retain storage');
+      },
+    };
+    const plan = await planLifecycle({
+      operation: 'unpublish',
+      manifest: job.current!,
+      saved: [first.current!, first.snapshot!],
+      snapshotPairs: [{ current: first.current!, snapshot: first.snapshot! }],
+      relays: publicationDestinations([job]),
+      local: true,
+      io,
+    });
+    expect(plan.relays).toHaveLength(16);
+    const receipt = createLifecycleReceipt(plan, 'unpublish');
+    expect(parseReceipt(receipt).plan.relays).toHaveLength(16);
+    const signer = await f.accounts.signer({ kinds: [5] });
+    try {
+      await executeLifecycle(receipt, {
+        signer,
+        local: true,
+        io,
+        save: async () => {},
+      });
+    } finally {
+      await signer.close();
+    }
+    expect(lifecycleFinished(receipt)).toBe(true);
+    for (const url of [primary, ...mirrors, ...outbox])
+      expect(
+        (f.events.get(url) ?? []).some(
+          (e) => e.id === job.current!.id || e.id === job.snapshot!.id,
+        ),
+      ).toBe(false);
+  } finally {
+    await f.close();
+  }
+});
+
+test('cancelling optional delivery retains primary success and does not require a nonexistent pending resume', async () => {
+  const f = await fixture(),
+    controller = new AbortController();
+  try {
+    f.options.signal = controller.signal;
+    f.deps.relays!.read = async (_url, filter) => {
+      if (filter.kinds?.includes(10002)) controller.abort();
+      return [];
+    };
+    const result = await publishProject(f.options);
+    expect(result.status).toBe('announced_pending_index');
+    const job = await f.load();
+    expect(job.error).toBeUndefined();
+    expect(job.outbox!.lookupError!.code).toBe('OPTIONAL_COPY_CANCELLED');
+    expect((await f.journal.index()).active).toBeNull();
+    const [code, output, error] = await cliStatus(f.project, false);
+    expect(code, output + error).toBe(0);
+    expect(output).toContain('OPTIONAL_COPY_CANCELLED');
   } finally {
     await f.close();
   }

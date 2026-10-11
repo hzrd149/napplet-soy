@@ -11,11 +11,11 @@ export function outboxReport(outbox: PublishJob['outbox'] | null): string[] {
     lines.push(
       outbox.relays.length
         ? `Your outbox relays (NIP-65, best effort): ${copied.length}/${outbox.relays.length} copied${copied.length ? ` · ${copied.join(', ')}` : ''}`
-        : 'Your outbox relays (NIP-65): already covered by the publication relay and mirrors',
+        : 'Your outbox relays (NIP-65): no additional eligible destinations',
     );
     if (outbox.ignored)
       lines.push(
-        `Skipped ${outbox.ignored} listed write relay${outbox.ignored === 1 ? '' : 's'}: outside the publication relay policy or over the ${MAX_OUTBOX_RELAYS}-relay limit.`,
+        `Skipped ${outbox.ignored} listed write relay${outbox.ignored === 1 ? '' : 's'}: outside the publication relay policy (including the 256-character canonical URL bound), over the ${MAX_OUTBOX_RELAYS}-relay limit, or beyond the retained destination history limit.`,
       );
   } else
     lines.push(
