@@ -1,6 +1,6 @@
 import { manifestBlocked } from '../../moderation/src/policy';
 import { decodeAddress, identityAddress, verifiedEvent } from '../../protocol/src';
-import { validateRelease } from '../../protocol/src/manifest';
+import { validateManifest, validateRelease } from '../../protocol/src/manifest';
 import { indexedLookup, indexedArtifact, indexHealth, indexStore } from './indexed-catalog';
 
 /** Pure projection lookup: no request can trigger relay access, downloads, or execution. */
@@ -14,7 +14,7 @@ export async function publicationResponse(request: Request) {
     if (
       naddr.length > 4096 ||
       !/^[a-f0-9]{64}$/.test(currentId) ||
-      !/^[a-f0-9]{64}$/.test(snapshotId)
+      (url.searchParams.has('snapshot') && !/^[a-f0-9]{64}$/.test(snapshotId))
     )
       throw new Error();
     address = identityAddress(decodeAddress(naddr));
@@ -25,7 +25,9 @@ export async function publicationResponse(request: Request) {
   const candidate = row ? verifiedEvent(JSON.parse(row.event)) : null;
   const current = candidate && !manifestBlocked(candidate) ? candidate : null;
   const entry = (await indexedLookup({ type: 'address', naddr })).entry;
-  const snapshot = (await indexedLookup({ type: 'snapshot', id: snapshotId })).entry;
+  const snapshot = snapshotId
+    ? (await indexedLookup({ type: 'snapshot', id: snapshotId })).entry
+    : null;
   let status: 'ready' | 'pending' | 'superseded' =
     current && current.id !== currentId ? 'superseded' : 'pending';
   const health = indexHealth();
@@ -34,11 +36,13 @@ export async function publicationResponse(request: Request) {
     !health.stale &&
     !health.errors?.length &&
     entry?.availability === 'ready' &&
-    snapshot?.availability === 'ready' &&
+    (!snapshotId || snapshot?.availability === 'ready') &&
     current?.id === currentId
   ) {
     try {
-      const release = await validateRelease(entry.manifest, snapshot.manifest);
+      const release = snapshotId
+        ? await validateRelease(entry.manifest, snapshot!.manifest)
+        : await validateManifest(entry.manifest);
       if (await indexedArtifact(release.artifactHash)) status = 'ready';
     } catch {
       /* A mismatched pair can never be confirmed. */

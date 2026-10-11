@@ -1,3 +1,4 @@
+import { relatedAssetHtml } from '../../assets/src/related';
 import { validateAssets, ASSET_LOCK, ASSET_MODULE, ASSET_TYPES, assetMime } from '../../assets/src';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, realpath, rm } from 'node:fs/promises';
@@ -252,12 +253,27 @@ export async function inspectProject(
     );
   if (!contents.get('LICENSE')?.length)
     throw new PublishError('SOURCE_LICENSE', 'Provide a nonempty LICENSE file before publishing.');
-  const html = contents.get(project.entry)!;
+  const originalHtml = contents.get(project.entry)!;
   try {
-    if (!new TextDecoder('utf-8', { fatal: true }).decode(html).trim()) throw new Error();
+    if (!new TextDecoder('utf-8', { fatal: true }).decode(originalHtml).trim()) throw new Error();
   } catch {
     throw new PublishError('ARTIFACT_INVALID', 'index.html must be nonempty UTF-8 HTML.');
   }
+  // Frozen publications already contain the reviewed bytes, including older jobs
+  // that predate related links. Never retrofit metadata during a retry.
+  const html = frozenCommit ? originalHtml : await relatedAssetHtml(originalHtml, managed);
+  if (html.length > MAX_ARTIFACT_BYTES)
+    throw new PublishError(
+      'ARTIFACT_LIMIT',
+      'The HTML including related asset links exceeds 25 MiB.',
+    );
+  contents.set(project.entry, html);
+  const artifactFile = files.find((file) => file.path === project.entry)!;
+  total += html.length - originalHtml.length;
+  if (total > MAX_SOURCE_BYTES)
+    throw new PublishError('SOURCE_LIMIT', 'Keep the selected source under 40 MiB.');
+  artifactFile.hash = await sha256(html);
+  artifactFile.size = html.length;
   const requires = [
     ...new Set([
       ...project.requires,

@@ -1,3 +1,6 @@
+import { relatedAssetHtml } from '../../../packages/assets/src/related';
+import { regularFile } from '../../../packages/publish/src/project';
+import { MAX_ARTIFACT_BYTES } from '../../../packages/protocol/src';
 import { projectEnvironment as environment, runProjectCommand as command } from './project-process';
 import {
   readBuildRecipe,
@@ -277,13 +280,32 @@ export async function setupProject(directory: string, signal?: AbortSignal) {
 }
 
 export async function buildProject(directory: string, signal?: AbortSignal) {
-  await validateAssets(directory);
+  const managed = await validateAssets(directory);
   await backendProject(directory);
   const recipe = await readBuildRecipe(directory);
-  if (recipe) return buildWithRecipe(directory, recipe, signal);
-  if (!(await Bun.file(join(directory, 'node_modules/.modules.yaml')).exists()))
-    await setupProject(directory, signal);
-  await projectTool(directory, ['run', 'build'], signal);
+  if (recipe) await buildWithRecipe(directory, recipe, signal);
+  else {
+    if (!(await Bun.file(join(directory, 'node_modules/.modules.yaml')).exists()))
+      await setupProject(directory, signal);
+    await projectTool(directory, ['run', 'build'], signal);
+  }
+  const config = await Bun.file(join(directory, 'napplet.json')).json();
+  // Legacy index.html is editable source; inspection prepares it in memory.
+  if (config.entry === 'dist/index.html') {
+    const original = await regularFile(directory, config.entry, MAX_ARTIFACT_BYTES);
+    const html = await relatedAssetHtml(original, managed);
+    if (html.length > MAX_ARTIFACT_BYTES)
+      throw new DiagnosticError(
+        'ARTIFACT_LIMIT',
+        'The HTML including related asset links exceeds 25 MiB.',
+        {
+          operation: 'prepare built artifact',
+          target: config.entry,
+          recovery: 'Reduce embedded assets, then run soyli build again.',
+        },
+      );
+    await Bun.write(join(directory, config.entry), html);
+  }
 }
 
 // Ask the project's own driver in a fresh Node process. Its registry selects the

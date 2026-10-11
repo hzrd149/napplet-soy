@@ -1,7 +1,83 @@
 # soyLI releases and updates
 
 GitHub Releases distribute the standalone CLI independently of the website/VPS.
-The current published version is **0.25.1**.
+The current published version is **0.25.3**.
+
+**0.25.3 published 2026-10-09 (Europe/Vienna); no host deployment:**
+[GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.25.3),
+source `4fa807dd999b7b8eb5050a1e0dc173bd16403628`.
+[Release CI 37920572316](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37920572316)
+passed TypeScript, 596 source tests (4,762 assertions), four native packages and
+publication of all 11 assets.
+[Nix CI 37920564336](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37920564336)
+passed realization, forced rebuild and offline NixOS VM checks. Public archive
+checksums, aggregate checksums, installer bytes and tagged-source manifest match.
+An isolated public macOS ARM64 installation reports current through `doctor` and
+`update`; a real 0.25.2 → 0.25.3 upgrade preserves account/project markers.
+
+Includes [PR #8](https://github.com/zeSchlausKwab/napplet-soy/pull/8) and its
+HTML parser fixes. Builds and publication prepare deterministic BUD-10
+`<link rel="related">` declarations for each external managed asset hash. Clients
+can discover resources from verified HTML without running game code. Declarations
+stay in the document head, preserve rendering mode and author metadata, and are
+idempotent. Embedded assets and frozen publication retries retain their bytes.
+See [coverage and limits](ASSETS.md#related-resource-links--soyli-0253).
+
+Existing napplets remain playable. The NIP-5D/NAP-RESOURCE pins and runtime
+permissions are unchanged. No website or service deployment is required for this
+CLI release; offline saving and backup UI are separate work. The running website's
+installer remains pinned to 0.25.2 until the next website deployment. Existing
+installations can use `soyli update`; new installations can use the release's
+`install.sh` directly. Restart previews after upgrading. `soyli skills update`
+refreshes the asset guide in existing projects without rewriting their source.
+
+**0.25.2 published and deployed 2026-10-09 (Europe/Vienna):**
+[GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.25.2),
+source `2b5d4f72dbd4b1b9c999babb6f786679de6e5ea0`.
+[Release CI 37908614802](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37908614802)
+passed all 590 source tests, four native package jobs and publication of 11 assets.
+[Nix CI 37908611679](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37908611679)
+passed dependency/package realization, force-rebuild and offline NixOS VM checks.
+All public checksums and installer bytes match; the manifest identifies the tagged
+source and all four native targets. A separate public installation reports 0.25.2
+and current through both `doctor` and `update`.
+
+Ordinary `soyli publish` updates the stable named listing. Use
+`soyli publish --snapshot` when an additional independent immutable copy is wanted.
+Pending jobs retain their frozen choice; older paired jobs keep their exact events
+and resume behavior. No existing publication or Git history is rewritten.
+
+The gallery groups historical snapshots when an exact signed pair or the author's
+validated release descriptor points to a live newer listing. This grouping affects
+presentation only; pinned links, independent identities and their social, storage,
+backend and deletion boundaries remain intact. Named-only website confirmation
+checks the exact current revision and verified artifact. Hosts need the matching
+website/indexer update; a CLI release alone does not update a running host.
+
+After upgrading with `soyli update`, restart previews and use `soyli skills update`
+inside existing projects to refresh publishing guidance. No napplet migration,
+republish or bulk deletion is required to group the previously reported cards.
+Local verification passes TypeScript, 590 source tests (4,725 assertions), the
+production build, captured signed-event replay, and eight real-service cases,
+including publication/resume, collaboration, linked source, large assets,
+production-browser pinned playback, historical grouping and deletion isolation.
+Website release `20261009091435416-91120` is active with the existing
+shared-Caddy, port 3040 and legacy-CPU profile. The unchanged target helper passes
+all 590 source tests, relay race/process checks, 18 Blossom checks, eight GRASP
+checks, production build and three Linux backend isolation/authorization/backup
+checks before activation. A CPU-loaded Mac exceeded fixture deadlines during the
+initial local attempt; clean native CI and target checks passed without changing
+application timeouts or test assertions.
+
+Fresh desktop/390px browsers show one card for the affected creator while retaining
+the separate creator's same-title napplet, with no page errors or overflow. All
+three reported old links return their exact signed snapshot and hash-verified HTML
+(about 2 MiB each). Public health and index identify the new release with no stale
+or failed destinations. The served installer matches; five PM2 processes are online
+with zero restarts, and Caddy/CVM/TURN are active. Both shared proxy hashes are
+unchanged, the other site returns HTTPS 200, and previous release
+`20261007184250765-95782` remains available for rollback. Persistent state is retained.
+This verification does not certify physical phones, a reboot or long-term uptime.
 
 **0.25.1 published and deployed 2026-10-07 (Europe/Vienna):**
 [GitHub release](https://github.com/zeSchlausKwab/napplet-soy/releases/tag/soyli-v0.25.1),

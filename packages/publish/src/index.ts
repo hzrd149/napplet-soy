@@ -14,7 +14,7 @@ import {
   verifiedEvent,
   type SignedEvent,
 } from '../../protocol/src';
-import { validateRelease } from '../../protocol/src/manifest';
+import { validateManifest, validateRelease } from '../../protocol/src/manifest';
 import { prepareSource, publishSource, sourceGit, sourceUrls } from '../../grasp/src/client';
 import { uploadBlob } from '../../blossom/src/client';
 import type { EventTemplate } from 'nostr-tools';
@@ -64,6 +64,8 @@ export type PublishOptions = {
   targets?: Partial<Targets>;
   dryRun?: boolean;
   resume?: boolean;
+  /** Opt in to an additional independent immutable manifest. */
+  snapshot?: boolean;
   accounts?: Pick<Accounts, 'current' | 'signer'>;
   check: (
     contents: Map<string, Uint8Array>,
@@ -262,6 +264,7 @@ export async function publishProject(options: PublishOptions) {
           };
     return {
       status: 'dry_run' as const,
+      snapshot: options.snapshot === true,
       fingerprint,
       plan,
       sourceRepository: selected
@@ -388,7 +391,8 @@ export async function publishProject(options: PublishOptions) {
             !retired &&
             !refreshedInShell &&
             (previous.repository?.address ?? null) === (selected?.address ?? null) &&
-            (!options.requirePreview || previous.preview)
+            (!options.requirePreview || previous.preview) &&
+            (!options.snapshot || previous.snapshotMode !== 'none')
           )
             job = previous;
           if (!job) {
@@ -559,6 +563,7 @@ export async function publishProject(options: PublishOptions) {
               version: 1,
               id,
               fingerprint: inspected.fingerprint,
+              snapshotMode: options.snapshot ? 'explicit' : 'none',
               plan,
               createdAt,
               parent: previous?.id ?? null,
@@ -606,6 +611,11 @@ export async function publishProject(options: PublishOptions) {
           }
         }
         if (!job) throw new PublishError('PUBLISH_MISSING', 'No publication was prepared.');
+        if (options.snapshot && job.snapshotMode === 'none')
+          throw new PublishError(
+            'PUBLISH_OPTIONS',
+            'This frozen release was prepared without a snapshot. Finish it with publish --resume, then run publish --snapshot to request an immutable copy.',
+          );
         if (job.plan.pubkey !== account.pubkey)
           throw new PublishError(
             'CREATOR_MISMATCH',
@@ -814,32 +824,33 @@ export async function publishProject(options: PublishOptions) {
           );
           if (!completed) await save();
         }
-        job.snapshot = await sign(
-          {
-            kind: 5129,
-            created_at: job.createdAt,
-            content: standalone ? job.plan.description : '',
-            tags: [
-              ...tags,
-              ...(standalone
-                ? [
-                    ...(job.plan.remix?.parent ? [['a', job.plan.remix.parent]] : []),
-                    ...(job.plan.remix?.origin ? [['A', job.plan.remix.origin]] : []),
-                  ]
-                : [
-                    [
-                      'a',
-                      identityAddress({
-                        kind: 35129,
-                        pubkey: account.pubkey,
-                        identifier: job.plan.identifier,
-                      }),
-                    ],
-                  ]),
-            ],
-          },
-          job.snapshot,
-        );
+        if (job.snapshotMode !== 'none')
+          job.snapshot = await sign(
+            {
+              kind: 5129,
+              created_at: job.createdAt,
+              content: standalone ? job.plan.description : '',
+              tags: [
+                ...tags,
+                ...(standalone
+                  ? [
+                      ...(job.plan.remix?.parent ? [['a', job.plan.remix.parent]] : []),
+                      ...(job.plan.remix?.origin ? [['A', job.plan.remix.origin]] : []),
+                    ]
+                  : [
+                      [
+                        'a',
+                        identityAddress({
+                          kind: 35129,
+                          pubkey: account.pubkey,
+                          identifier: job.plan.identifier,
+                        }),
+                      ],
+                    ]),
+              ],
+            },
+            job.snapshot,
+          );
         if (!completed) await save();
         job.current = await sign(
           {
@@ -854,7 +865,8 @@ export async function publishProject(options: PublishOptions) {
           },
           job.current,
         );
-        await validateRelease(job.current, job.snapshot);
+        if (job.snapshot) await validateRelease(job.current, job.snapshot);
+        else await validateManifest(job.current);
         if (!completed) await save();
         await guard();
         progress('source');
@@ -960,10 +972,12 @@ export async function publishProject(options: PublishOptions) {
           job.receipts.descriptor = true;
           await save();
         }
-        progress('snapshot');
-        await relays.ensure(job.plan.targets.relay, job.snapshot);
-        job.receipts.snapshot = true;
-        await save();
+        if (job.snapshot) {
+          progress('snapshot');
+          await relays.ensure(job.plan.targets.relay, job.snapshot);
+          job.receipts.snapshot = true;
+          await save();
+        }
         await guard();
         progress('current');
         await relays.ensure(job.plan.targets.relay, job.current);
@@ -972,7 +986,7 @@ export async function publishProject(options: PublishOptions) {
         await guard();
         // Copies are best effort: a failure is recorded without undoing the primary release.
         const copy = async (url: string, operation: string, recovery: string) => {
-          let event = currentJob.preview?.descriptor ?? currentJob.snapshot!;
+          let event = currentJob.preview?.descriptor ?? currentJob.snapshot ?? currentJob.current!;
           try {
             for (const next of [
               currentJob.preview?.descriptor,

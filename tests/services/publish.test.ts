@@ -97,6 +97,7 @@ test('publisher runs its sandbox check, survives interruption, retains Git relea
     expect(created, output).toBe(0);
     const project = join(services.directory, 'creation');
     const options = {
+      snapshot: true, // Exercise an explicitly paired publication and its interrupted retry.
       directory: project,
       network: 'local' as const,
       accounts,
@@ -903,7 +904,7 @@ test('a project with its own NIP-34 remote releases against it; soyLI signs and 
     expect(diagnostic.recovery).toContain(await sourceGit(project, ['rev-parse', 'HEAD']));
     expect(
       await readRelay(services.targets.relay, { kinds: [35129, 5129], authors: [creator.pubkey] }),
-    ).toHaveLength(2);
+    ).toHaveLength(1);
 
     // The real entrypoint reports an unreadable nostr:// remote with its cause, without secrets.
     await sourceGit(project, ['remote', 'add', 'broken', 'nostr://unreachable.invalid/project']);

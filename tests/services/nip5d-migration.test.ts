@@ -14,7 +14,8 @@ import {
   sha256,
   type SignedEvent,
 } from '../../packages/protocol/src';
-import { IndexStore } from '../../packages/backend/src/index-store';
+import { IndexStore, indexedProjection } from '../../packages/backend/src/index-store';
+import { indexPreviewImages } from '../../packages/backend/src/preview-images';
 import sharp from 'sharp';
 import { LifecycleTransport } from '../../packages/lifecycle/src/transport';
 
@@ -385,6 +386,71 @@ test('legacy and standalone wire manifests migrate through relay, Blossom, index
     await ui(frame.locator('#saved')).toHaveText('saved');
     frame = await play(`/r/${newNamed.id}`, 'Standalone named');
     await ui(frame.locator('#saved')).toHaveText('saved');
+    // The index and this browser never observed the old named partner. Its own
+    // signed release descriptor can group the snapshot for display, but cannot
+    // put it in the maintainer's paired-snapshot deletion inventory.
+    const historicalTitle = 'Historical display copy';
+    const historicalDescriptor = await signer.signEvent({
+      kind: 32267,
+      created_at: created - 1,
+      content: 'Earlier release',
+      tags: [
+        ['d', 'old-display-release'],
+        ['name', historicalTitle],
+        ['latest', parentAddress],
+      ],
+    });
+    const historicalSnapshot = await signer.signEvent({
+      kind: 5129,
+      created_at: created - 1,
+      content: 'Earlier release',
+      tags: [
+        ['title', historicalTitle],
+        ['x', hash],
+        ['server', origin],
+        ['R', 'storage'],
+        ['app', `32267:${author}:old-display-release`],
+      ],
+    });
+    await relays.ensure(relay, historicalDescriptor);
+    await relays.ensure(relay, historicalSnapshot);
+    await projected(historicalSnapshot);
+    // The public-only metadata worker deliberately refuses loopback relays.
+    // Feed its signed local transport result through the same bounded indexing
+    // adapter, after the worker's playback/optional-projection checkpoint.
+    await ui
+      .poll(() => store!.revision(historicalSnapshot.id)?.preview_at ?? 0, { timeout: 20000 })
+      .toBeGreaterThan(Date.now());
+    const historicalRow = store!.revision(historicalSnapshot.id)!;
+    const historicalEntry = (await indexedProjection(historicalRow, [relay]))!;
+    await indexPreviewImages(
+      env.SPACE_INDEX_DIR,
+      [historicalEntry],
+      await relays.read(relay, { ids: [historicalDescriptor.id], limit: 1 }),
+      AbortSignal.timeout(3000),
+    );
+    expect(historicalEntry.metadata?.map((event) => event.id)).toEqual([historicalDescriptor.id]);
+    const fixtureIndex = new IndexStore(env.SPACE_INDEX_DIR, true);
+    try {
+      fixtureIndex.project(
+        historicalSnapshot.id,
+        historicalEntry,
+        historicalRow.retry_at,
+        historicalRow.preview_at,
+      );
+    } finally {
+      fixtureIndex.close();
+    }
+    const grouped = await (await fetch(site)).text();
+    expect(grouped).not.toContain(`>${historicalTitle}</a>`);
+    frame = await play(`/r/${historicalSnapshot.id}`, historicalTitle);
+    expect(await frame.locator('body').getAttribute('data-data-scope')).not.toBe(oldScope);
+    await page.getByRole('link', { name: 'Back to the playground', exact: true }).click();
+    await ui(page.getByRole('link', { name: historicalTitle, exact: true })).toHaveCount(0);
+    await ui(
+      page.getByRole('link', { name: 'Advanced standalone named', exact: true }),
+    ).toBeVisible();
+
     // A new document has no in-memory manifest cache. Navigate within the SPA
     // after replacement so the relay-pruned revision must come from the signed
     // index response, rather than the initial document's server rendering.
@@ -487,6 +553,12 @@ test('legacy and standalone wire manifests migrate through relay, Blossom, index
       await ui(
         authorPage.getByRole('link', { name: 'Independent snapshot', exact: true }),
       ).toBeVisible();
+      await ui(authorPage.getByRole('link', { name: historicalTitle, exact: true })).toBeVisible();
+      expect(
+        (await relays.read(relay, { ids: [historicalSnapshot.id], limit: 1 })).map(
+          (event) => event.id,
+        ),
+      ).toEqual([historicalSnapshot.id]);
       await ui(authorPage.getByRole('link', { name: 'Standalone named', exact: true })).toHaveCount(
         0,
       );

@@ -105,8 +105,12 @@ the event soyLI publishes; do not set `VITE_DEV_PRIVKEY_HEX` or hand-edit that
 generated event to migrate. Use `soyli publish --dry-run`, `soyli check`, then
 `soyli publish` for the reviewed build and source.
 
-Named napplets use kind 35129 and a stable `d` identifier; snapshots use kind
-5129 without `d`. Snapshot `a`/`A` describes immediate/root ancestry only, which
+Ordinary `soyli publish` updates kind 35129 with the project's stable `d`
+identifier. Keep that identifier across edits so the listing and social thread
+continue. `soyli publish --snapshot` additionally creates an independent kind-5129
+publication without `d`; use it when you explicitly want that immutable copy.
+The returned `/r/<current-event-id>` link already pins the signed named revision.
+Old frozen jobs resume their exact snapshot choice and signatures. Snapshot `a`/`A` describes immediate/root ancestry only, which
 can belong to another author. It never borrows that author's storage, identity,
 backend or permissions. Keep source provenance separate from runtime authority.
 

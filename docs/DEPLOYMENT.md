@@ -3,9 +3,43 @@
 Deployment is operator-run. Routine changes are verified and committed locally;
 do not deploy or upload releases unless the user explicitly requests deployment.
 
-Updated 2026-10-07. **[napplet.soy](https://napplet.soy) is live**, using the temporary legacy CPU profile on the existing Namecheap VPS. Caddy issued valid Let's Encrypt certificates for the website, www, Blossom and Git; the other site remains available. The deploy script includes Caddy and PM2. Local production builds exercise the same web, relay, Blossom and GRASP implementations and PM2 definitions. Dedicated hosts use the pinned local Caddy version; shared hosts retain their existing Caddy. See the deployment record below for verification and the compatibility workaround.
+Updated 2026-10-09. **[napplet.soy](https://napplet.soy) is live**, using the temporary legacy CPU profile on the existing Namecheap VPS. Caddy issued valid Let's Encrypt certificates for the website, www, Blossom and Git; the other site remains available. The deploy script includes Caddy and PM2. Local production builds exercise the same web, relay, Blossom and GRASP implementations and PM2 definitions. Dedicated hosts use the pinned local Caddy version; shared hosts retain their existing Caddy. See the deployment record below for verification and the compatibility workaround.
 
-Latest verified website release: **`20261007184250765-95782`**, source
+Latest verified website release: **`20261009091435416-91120`**, source
+`2b5d4f72dbd4b1b9c999babb6f786679de6e5ea0`, installer pinned to **soyLI 0.25.2**.
+[Release CI 37908614802](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37908614802)
+passed 590 source tests, all four native package jobs and publication of 11 assets.
+[Nix CI 37908611679](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37908611679)
+passed realization, force-rebuild and offline NixOS VM checks. Public checksums,
+installer bytes, manifest/source and a separate installation/doctor/update pass.
+
+Ordinary publication updates one stable named listing; an independent immutable
+copy requires `publish --snapshot`. Older frozen paired jobs retain their original
+resume contract. The deployed gallery groups historical snapshots through exact
+signed pairs or strictly validated own-author presentation hints; pinned identity,
+playback, social, storage, backend and deletion boundaries remain unchanged.
+
+The unchanged VPS helper passed TypeScript and all 590 source tests on Bun 1.3.8,
+Go relay race/process checks, 18 Blossom tests, eight GRASP tests, the production
+build and three Linux backend isolation/authorization/backup tests before activation.
+The initial local attempt hit fixture deadlines on a CPU-loaded Mac and stopped
+before upload. Source qualification used clean native CI; all source/service gates
+still ran on the target. Application deadlines and test assertions were unchanged.
+
+Fresh desktop/390px browsers show one card for the affected creator and preserve
+a separate creator's same-title napplet, without page errors or overflow. All three
+reported historical URLs return their original signed snapshots and verified HTML
+(about 2 MiB each). Public health/index report the exact new release and a fresh,
+error-free heartbeat; the served installer matches the tagged source. All five
+PM2 processes are online with zero restarts; Caddy, CVM and TURN are active. Both
+shared proxy hashes are unchanged and schlaustronics.com returns HTTPS 200.
+Persistent state is retained and previous release `20261007184250765-95782` remains
+available for rollback. Port 3040, shared-Caddy and legacy-CPU settings remain.
+Physical phones, reboot recovery and long-term uptime were not tested in this window.
+
+### Previous verified rollout — 2026-10-07
+
+Website release: **`20261007184250765-95782`**, source
 `fed5a41f0de19aa01afb0e329ca86401c3cb77cf`, installer pinned to **soyLI 0.25.1**.
 [Native release CI](https://github.com/zeSchlausKwab/napplet-soy/actions/runs/37659569078)
 passed source checks, all four platform jobs and publication. All public asset

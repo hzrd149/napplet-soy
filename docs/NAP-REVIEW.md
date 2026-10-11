@@ -1,5 +1,19 @@
 # NAP concepts and expansion review
 
+## Stable publishing and historical gallery grouping — 2026-10-09 source
+
+Ordinary publication now writes the stable named listing; `publish --snapshot`
+explicitly adds an independent copy. Old frozen jobs retain their paired events.
+This changes a tooling default, not NIP-5D wire semantics or upstream pins.
+Gallery grouping can use an exact signed pair or the snapshot author's
+release-specific signed descriptor pointing to a live newer listing. Descriptor
+hints grant no lifecycle, social, storage or backend authority; independent
+snapshots and old links remain valid. See [publishing](PUBLISHING.md) and
+[migration semantics](NIP5D-MIGRATION.md). Released as soyLI 0.25.2 and deployed
+in `20261009091435416-91120` on 2026-10-09; source/native/Nix, target service
+checks and live desktop/mobile gallery plus exact historical-byte checks pass.
+See [release evidence](CLI-RELEASES.md).
+
 ## NIP-22 comment audit — 2026-10-05
 
 Reviewed the official [NIP-22 at 13664fb](https://github.com/nostr-protocol/nips/blob/13664fb18a3ce5fa48a849de012ab789d82eb254/22.md).
@@ -427,3 +441,13 @@ NAP-CVM proposal. It does not amend that proposal or create a new host domain.
 Its optional local preview and account binding do not affect other publishers'
 playback. An opt-in Linux deployment path is qualified separately; public activation and any CEP submission remain separate decisions. See
 [DYNAMIC-BACKENDS.md](DYNAMIC-BACKENDS.md) for the implementation boundary.
+
+## Related resource discovery — soyLI 0.25.3
+
+Reviewed BUD-10 at `342cae9e5152c5214c83ca1f7f473c2eba0256f1` for
+`blossom:<sha256>.<ext>` with optional exact-size discovery metadata. soyLI's
+prepared HTML declares external managed resources through `link rel="related"`;
+this is HTML association metadata, not a NAP operation or manifest extension.
+The existing NIP-5D and NAP-RESOURCE pins and `blossom:sha256:<hash>` playback
+calls remain unchanged. Missing related links never prevent playback or change
+publisher admission. See [coverage and limits](ASSETS.md#related-resource-links--soyli-0253).

@@ -1,5 +1,5 @@
 import { encodeAddress } from '../../protocol/src';
-import { validateRelease } from '../../protocol/src/manifest';
+import { validateManifest, validateRelease } from '../../protocol/src/manifest';
 import { publicationReceiptSchema } from '../../protocol/src/publication';
 import type { PublishJob } from './journal';
 
@@ -30,7 +30,7 @@ export async function confirmWebsite(
     encodeAddress({ kind: 35129, pubkey: job.plan.pubkey, identifier: job.plan.identifier }),
   );
   url.searchParams.set('current', job.current!.id);
-  url.searchParams.set('snapshot', job.snapshot!.id);
+  if (job.snapshot) url.searchParams.set('snapshot', job.snapshot.id);
   let reason: WebsiteCheck['reason'] = 'unavailable';
   while (!signal.aborted) {
     try {
@@ -61,10 +61,15 @@ export async function confirmWebsite(
       );
       if (Math.abs(Date.now() - receipt.checkedAt) > 60000) break;
       if (receipt.status === 'ready') {
-        const release = await validateRelease(receipt.current, receipt.snapshot);
+        const release = job.snapshot
+          ? await validateRelease(receipt.current, receipt.snapshot)
+          : await validateManifest(receipt.current);
+        const current = 'current' in release ? release.current : release.manifest;
         if (
-          release.current.id !== job.current!.id ||
-          release.snapshot.id !== job.snapshot!.id ||
+          current.id !== job.current!.id ||
+          (job.snapshot
+            ? !('snapshot' in release) || release.snapshot.id !== job.snapshot.id
+            : receipt.snapshot !== null) ||
           release.artifactHash !== job.plan.artifactHash ||
           receipt.artifactHash !== release.artifactHash
         )

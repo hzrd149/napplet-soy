@@ -14,7 +14,10 @@ import { validatedPreview } from '../../protocol/src/preview';
 import { indexedEntries, indexedLookup, indexStore, indexHealth } from './indexed-catalog';
 import { manifestKey, newerManifest } from './index-store';
 import { legacySnapshotAddress, validateRelease } from '../../protocol/src/manifest';
-import { standalonePresentationKey } from '../../protocol/src/presentation-pairs';
+import {
+  snapshotPresentationAddress,
+  standalonePresentationKey,
+} from '../../protocol/src/presentation-pairs';
 
 // Set by the dev launcher only. No request, hostname, or URL parameter can enable this mode.
 export function publicDirectory() {
@@ -147,6 +150,9 @@ export async function communityEntries() {
   return [...winners.values()].filter((entry) => {
     if (entry.manifest.kind !== 5129) return true;
     if (paired.has(entry.revisionId)) return false;
+    const presentationAddress = snapshotPresentationAddress(entry.manifest, entry.metadata);
+    const target = presentationAddress && winners.get(presentationAddress);
+    if (target && target.manifest.created_at >= entry.manifest.created_at) return false;
     const address = legacySnapshotAddress(entry.manifest);
     // Keep snapshot URLs, but show one gallery card when its own author's current exists.
     return !address || address.split(':')[1] !== entry.pubkey || !winners.has(address);

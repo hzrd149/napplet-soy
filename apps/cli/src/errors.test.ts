@@ -382,3 +382,30 @@ exit 29
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('snapshot is an explicit publication option and invalid use reports recovery through the real CLI', async () => {
+  for (const args of [
+    ['status', '--snapshot'],
+    ['check', '--snapshot'],
+  ]) {
+    const child = Bun.spawn([...command, ...args, '--json'], {
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    const [code, out, err] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(code, out + err).not.toBe(0);
+    const diagnostic = JSON.parse(out).error;
+    expect(diagnostic.code).toBe('USAGE');
+    expect(diagnostic.message).toContain('only with soyli publish');
+  }
+  const help = Bun.spawn([...command, '--help'], { stdout: 'pipe', stderr: 'pipe' });
+  expect(await new Response(help.stdout).text()).toContain(
+    'publish [--project <folder>] [--snapshot]',
+  );
+  expect(await help.exited).toBe(0);
+});

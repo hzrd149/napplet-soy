@@ -81,7 +81,7 @@ Usage:
   bun run soyli account import [--stdin]
   bun run soyli account use <npub-or-account-id>
   bun run soyli account export <new-recovery-file> [--passphrase-stdin]
-  bun run soyli publish [--project <folder>] [--dry-run | --resume]
+  bun run soyli publish [--project <folder>] [--snapshot] [--dry-run | --resume]
   bun run soyli unpublish|republish|delete [--project <folder>] [--dry-run | --confirm <token> | --resume]
   bun run soyli lifecycle [--project <folder>]
   bun run soyli migrate <napplet-link-or-naddr> [--relay <url>] [--dry-run | --confirm <token> | --resume]
@@ -101,6 +101,7 @@ owner-only account files outside Git. Unset it to return to OS-vault accounts.
 Create reuses your selected account; account create --new creates and selects another.
 Previous identities and backups are kept. Connect accepts a hidden bunker link.
 Publish uses the selected account; a running publication keeps its starting account.
+Publish updates the stable listing. --snapshot also creates an independent immutable copy.
 Each public key keeps separate releases in the same folder. Status/resume use the selected author.
 Pair creates a nostrconnect link and QR to approve in your signer (120-second wait).
 Remote sessions default to owner-only files outside projects; local private keys use the OS vault.
@@ -228,6 +229,7 @@ try {
         project: { type: 'string' },
         'dry-run': { type: 'boolean' },
         resume: { type: 'boolean' },
+        snapshot: { type: 'boolean' },
         refresh: { type: 'boolean' },
         relay: { type: 'string' },
         blossom: { type: 'string' },
@@ -284,6 +286,11 @@ try {
     );
     process.exit(0);
   }
+  if (values.snapshot && positionals[0] !== 'publish')
+    throw new AccountError(
+      'USAGE',
+      'Use --snapshot only with soyli publish to request an independent immutable copy.',
+    );
   const network = values.network as Network;
   const sessionStorage = sessionStorageSchema.safeParse(values['session-storage'] ?? 'file');
   if (
@@ -856,6 +863,7 @@ try {
       (command === 'status' &&
         (values['dry-run'] ||
           values.resume ||
+          values.snapshot ||
           values.relay ||
           values.blossom ||
           values.grasp ||
@@ -864,7 +872,7 @@ try {
     )
       throw new AccountError(
         'USAGE',
-        'Use publish [--project folder] [--dry-run | --resume], or status [--project folder].',
+        'Use publish [--project folder] [--snapshot] [--dry-run | --resume], or status [--project folder].',
       );
     const targets = {
       ...(values.relay ? { relay: values.relay } : {}),
@@ -888,6 +896,7 @@ try {
               accounts,
               dryRun: values['dry-run'],
               resume: values.resume,
+              snapshot: values.snapshot,
               check: checkPublication,
               requirePreview: true,
               signal: controller.signal,
@@ -911,7 +920,7 @@ try {
       );
     else {
       console.log(
-        `${result.unchanged ? 'Existing publication' : 'Publication'}: ${result.status}\nSource commit: ${result.sourceCommit}\nNapplet: ${result.naddr}\nSnapshot: ${result.snapshotId ?? 'pending'}\n${result.websiteReady ? `Website confirmed at ${new Date(result.websiteCheckedAt!).toISOString()}: ${result.url}\nPinned version: ${result.snapshotUrl}` : `Website ${result.websiteStatus}; the route is not yet confirmed: ${result.url}`}`,
+        `${result.unchanged ? 'Existing publication' : 'Publication'}: ${result.status}\nSource commit: ${result.sourceCommit}\nNapplet: ${result.naddr}${result.snapshotId ? `\nIndependent snapshot: ${result.snapshotId}` : ''}\n${result.websiteReady ? `Website confirmed at ${new Date(result.websiteCheckedAt!).toISOString()}: ${result.url}\nPinned version: ${result.snapshotUrl}` : `Website ${result.websiteStatus}; the route is not yet confirmed: ${result.url}`}`,
       );
       if (result.preview)
         console.log(
